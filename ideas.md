@@ -43,6 +43,7 @@ for that instance.
 ## LEVEL DATA STRUCTURE
 - Wait queue.
 - RCU list of messages.
+- Bitmasks and stuff to wait on to monitor conditions for wait events (use those APIs).
 
 ## MODULE PARAMETERS
 - System call numbers (one pseudofile each) (read-only).
