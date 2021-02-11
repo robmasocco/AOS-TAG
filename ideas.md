@@ -1,3 +1,4 @@
+# GENERAL ARCHITECTURE NOTES
 ## KERNEL-SIDE ARCHITECTURE
 - Decentralized architecture: there's only one AVL tree to lookup active instances, register new ones, or delete
 existing ones from: indexed by keys, each entry points to a data structure for that instance, shared by all
@@ -30,6 +31,7 @@ that do what follows.
 for that instance.
 - There must be a wait queue for each level.
 
+# DATA STRUCTURES AND TYPES
 ## PER-CPU MODULE STRUCTURE
 - Array of 256 instance pointers, indexed by "tag descriptor".
 - Bitmask of free/used descriptors (consider fd_set?).
@@ -45,16 +47,16 @@ for that instance.
 - RCU list of messages.
 - Bitmasks and stuff to wait on to monitor conditions for wait events (use those APIs).
 
-## MODULE PARAMETERS
+# MODULE PARAMETERS
 - System call numbers (one pseudofile each) (read-only).
 - Max number of entries in the general sharing AVL tree (configurable at insertion).
 - Length of the used instance array (configurable at insertion).
 
-## TODOs
+# TODOs
 - Synchronization of everything, also thinking about the device file show method.
 - System call module with exposed parameters (separate module?).
 - Test "configurable at insertion"+"read-only" module parameters.
 - The whole permissions+UID part. Probably EUID is involved here.
 
-## EXTRAS
+# EXTRAS
 - Module parameters consistency check at insertion, especially for max values and sizes of stuff.
