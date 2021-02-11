@@ -7,6 +7,7 @@ bitmask for free positions that is kept updated. Works like VFS with file descri
 tag_get returns the index in this per_cpu array as per the bitmask, given the key, and fills the entry in
 the array with the pointer to the shared data structure, also creating a node in the tree [key, pointer] for
 future gets (skip this step if IPC_PRIVATE is specified).
+Note that the whole structure is a per-cpu variable, to leave construction and destruction to the kernel.
 - When REMOVE is invoked, each thread decrements the atomic counter and NULLifies the corresponding entry in its
 per-cpu array, and the last one (i.e. counter = 0) also removes the node from the tree if the entry was shared,
 or from the linked list if it was not shared.
@@ -55,5 +56,4 @@ for that instance.
 - The whole permissions+UID part. Probably EUID is involved here.
 
 ## EXTRAS
-- You might want to use thread-specific desctructors to call a hidden system call and
-force the removal of all instances when a thread exits: consider pthread_key_create embedded in tag_get somehow.
+- Module parameters consistency check at insertion, especially for max values and sizes of stuff.
