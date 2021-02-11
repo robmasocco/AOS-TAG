@@ -52,6 +52,7 @@ for that instance.
 - Synchronization of everything, also thinking about the device file show method.
 - System call module with exposed parameters (separate module?).
 - Test "configurable at insertion"+"read-only" module parameters.
+- The whole permissions+UID part. Probably EUID is involved here.
 
 ## EXTRAS
 - You might want to use thread-specific desctructors to call a hidden system call and
