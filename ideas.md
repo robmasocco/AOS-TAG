@@ -51,9 +51,9 @@ The first rw_sem is for receivers as readers, the second is for senders as reade
 writers.
 When a remover comes, it trylocks the receivers's one as a writer, then eventually locks the senders's one as
 a writer, then flips the instance pointer to NULL, releases both locks and does its thing.
-When a receiver comes it locks its semaphore as reader, checks the pointer, eventually does its thing and
+When a receiver comes it trylocks its semaphore as reader, checks the pointer, eventually does its thing and
 unlocks its semaphore as reader.
-When a sender comes it locks its semaphore as reader, checks the pointer, eventually does its thing and
+When a sender comes it trylocks its semaphore as reader, checks the pointer, eventually does its thing and
 unlocks the semaphore as reader.
 Consider percpu_rw_semaphores, maybe when things are already working, but the lack of a writer_down_trylock
 makes them not so promising.
