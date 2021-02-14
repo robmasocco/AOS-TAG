@@ -39,6 +39,7 @@ structure for that instance. Maybe not lists, but something lock/wait-free nonet
 # MODULE PARAMETERS
 - System call numbers (one pseudofile each) (read-only).
 - Max number of active instances (configurable at insertion).
+- Max message size (4 KB) (read-only).
 
 # SYNCHRONIZATION
 ## ACCESS TO AN INSTANCE, REMOVAL
@@ -69,3 +70,6 @@ of each call.
 
 # EXTRAS
 - Module parameters consistency check at insertion, especially for max values and sizes of stuff.
+- Consider that a message can be as long as a page, at most... consider implementing an allocator based
+on pools of pages, multiple usages of a single page, using get_free_pages and the like, or just use
+kmalloc which is, after all, a SLAB allocator.
