@@ -70,7 +70,9 @@ of each call.
 
 # EXTRAS
 - Module parameters consistency check at insertion, especially for max values and sizes of stuff.
-- Signals support in system calls.
+- Signals support in system calls: handlers will be called upon return to user mode, so all you have
+to do is place threads on an interruptible wait queue, check for pending signals and in case return -EINTR
+in system calls. This is because signals are a user mode facility. Test this first.
 - Module locking: module "put" and "get" to prevent removal.
 - Consider that a message can be as long as a page, at most... consider implementing an allocator based
 on pools of pages, multiple usages of a single page, using get_free_pages and the like, or just use
