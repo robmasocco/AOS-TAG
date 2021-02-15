@@ -70,6 +70,7 @@ of each call.
 
 # EXTRAS
 - Module parameters consistency check at insertion, especially for max values and sizes of stuff.
+- Signals support in system calls.
 - Consider that a message can be as long as a page, at most... consider implementing an allocator based
 on pools of pages, multiple usages of a single page, using get_free_pages and the like, or just use
 kmalloc which is, after all, a SLAB allocator.
