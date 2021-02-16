@@ -55,7 +55,7 @@ A generic userland thread becomes a writer/reader through these device files.
 Would require a kobj for each key, then an attribute for each level.
 What about IPC_PRIVATE? Which routines would need to be called?
 Develop the baseline version first, then make sure it is doable and discuss it with Quaglia to avoid
-conflicts with the specification. It'll be a nice addtion.
+conflicts with the specification. It'll be a nice addtion. Might even be the start for a (char) device driver.
 
 # SYNCHRONIZATION
 ## ACCESS TO AN INSTANCE, REMOVAL
@@ -95,3 +95,5 @@ in system calls. This is because signals are a user mode facility. Test this fir
 - Consider that a message can be as long as a page, at most... consider implementing an allocator based
 on pools of pages, multiple usages of a single page, using get_free_pages and the like, or just use
 kmalloc which is, after all, a SLAB allocator.
+- Red-Black trees instead of AVLs.
+- A device driver?
