@@ -50,6 +50,13 @@ Wanna expose system call numbers as a device file, to be able to access it dynam
 Maybe customize the "show" method to provide binary data for the numbers, to directly read from the
 VFS when calling the stub and perform an automatic setup of hacked system calls with their numbers.
 
+## I/O
+A generic userland thread becomes a writer/reader through these device files.
+Would require a kobj for each key, then an attribute for each level.
+What about IPC_PRIVATE? Which routines would need to be called?
+Develop the baseline version first, then make sure it is doable and discuss it with Quaglia to avoid
+conflicts with the specification. It'll be a nice addtion.
+
 # SYNCHRONIZATION
 ## ACCESS TO AN INSTANCE, REMOVAL
 There are 3 kinds of threads: receivers, senders, removers.
