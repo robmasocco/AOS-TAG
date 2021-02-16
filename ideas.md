@@ -41,6 +41,15 @@ structure for that instance. Maybe not lists, but something lock/wait-free nonet
 - Max number of active instances (configurable at insertion).
 - Max message size (4 KB) (read-only).
 
+# DEVICE FILES
+## STATUS
+As requested, line-by-line status report.
+
+## SYSTEM CALLS
+Wanna expose system call numbers as a device file, to be able to access it dynamically from userland?
+Maybe customize the "show" method to provide binary data for the numbers, to directly read from the
+VFS when calling the stub and perform an automatic setup of hacked system calls with their numbers.
+
 # SYNCHRONIZATION
 ## ACCESS TO AN INSTANCE, REMOVAL
 There are 3 kinds of threads: receivers, senders, removers.
@@ -70,6 +79,8 @@ of each call.
 
 # EXTRAS
 - Module parameters consistency check at insertion, especially for max values and sizes of stuff.
+- Carefully think about what to expose as a module parameter (logic-less) and what needs more complexity,
+thus requiring a device file.
 - Signals support in system calls: handlers will be called upon return to user mode, so all you have
 to do is place threads on an interruptible wait queue, check for pending signals and in case return -EINTR
 in system calls. This is because signals are a user mode facility. Test this first.
