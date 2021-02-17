@@ -96,4 +96,5 @@ in system calls. This is because signals are a user mode facility. Test this fir
 on pools of pages, multiple usages of a single page, using get_free_pages and the like, or just use
 kmalloc which is, after all, a SLAB allocator.
 - Red-Black trees instead of AVLs.
+- MODULE_INFO stuff!
 - A device driver?
