@@ -104,9 +104,7 @@ thus requiring a device file.
 to do is place threads on an interruptible wait queue, check for pending signals and in case return -EINTR
 in system calls. This is because signals are a user mode facility. Test this first.
 - Module locking: module "put" and "get" to prevent removal.
-- Consider that a message can be as long as a page, at most... consider implementing an allocator based
-on pools of pages, multiple usages of a single page, using get_free_pages and the like, or just use
-kmalloc which is, after all, a SLAB allocator.
-- Splay trees as BSTs.
+- Splay trees as BSTs, using join-based alternative for deletion (to avoid splaying the predecessor to the top)
+and make nodes (structures) cache-aligned (in GCC: "struct ... {...} ... __attribute__ ((aligned (L1_CACHE_BYTES)));").
 - MODULE_INFO stuff!
 - A more complete device driver?
