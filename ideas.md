@@ -8,7 +8,7 @@ Max 256 nodes should be allowed. Only for shared instances.
 of the pointer. Maybe the next free index could be looked up with a bitmask, like fd_set.
 - The device file driver only has to lock and scan the array.
 
-## AVL TREE
+## BINARY SEARCH TREE
 - Represents key-instance associations.
 - Is indexed by int keys.
 - Each entry is an int "tag descriptor", index in the array.
@@ -17,7 +17,8 @@ of the pointer. Maybe the next free index could be looked up with a bitmask, lik
 - Maybe we must embed in the general structure an array of structures that represent each level, with members
 that do what follows.
 - Levels must be RCU, one linked list or something per level, all pointed by a fixed-size list in the control
-structure for that instance. Maybe not lists, but something lock/wait-free nonetheless.
+structure for that instance. Maybe not lists, but something lock/wait-free nonetheless, like (1, N) registers
+with appropriate synchronization.
 - There must be a wait queue for each level.
 
 # DATA STRUCTURES AND TYPES
@@ -41,9 +42,19 @@ structure for that instance. Maybe not lists, but something lock/wait-free nonet
 - Max number of active instances (configurable at insertion).
 - Max message size (4 KB) (read-only).
 
+# CHAR DEVICE DRIVER
+## OPEN
+Nop.
+
+## CLOSE
+Nop.
+
+## READ
+
 # DEVICE FILES
+A char device driver is required for these, maybe more than one or some minor-based behaviour.
 ## STATUS
-As requested, line-by-line status report.
+As requested, line-by-line status report. Located in /dev.
 
 ## SYSTEM CALLS
 Wanna expose system call numbers as a device file, to be able to access it dynamically from userland?
@@ -55,7 +66,7 @@ A generic userland thread becomes a writer/reader through these device files.
 Would require a kobj for each key, then an attribute for each level.
 What about IPC_PRIVATE? Which routines would need to be called?
 Develop the baseline version first, then make sure it is doable and discuss it with Quaglia to avoid
-conflicts with the specification. It'll be a nice addtion. Might even be the start for a (char) device driver.
+conflicts with the specification. It'll be a nice addtion.
 
 # SYNCHRONIZATION
 ## ACCESS TO AN INSTANCE, REMOVAL
@@ -76,6 +87,7 @@ Consider percpu_rw_semaphores, maybe when things are already working, but the la
 makes them not so promising.
 
 # TODOs
+- Complete definition of all operations.
 - Synchronization of everything, also thinking about the device file show method.
 - System call module with exposed parameters (separate module?).
 - Test "configurable at insertion"+"read-only" module parameters.
@@ -95,6 +107,6 @@ in system calls. This is because signals are a user mode facility. Test this fir
 - Consider that a message can be as long as a page, at most... consider implementing an allocator based
 on pools of pages, multiple usages of a single page, using get_free_pages and the like, or just use
 kmalloc which is, after all, a SLAB allocator.
-- Red-Black trees instead of AVLs.
+- Splay trees as BSTs.
 - MODULE_INFO stuff!
-- A device driver?
+- A more complete device driver?
