@@ -118,13 +118,15 @@ TODO
 
 TODO
 
-# TODOs
+# TODO LIST
 
 - Is an RCU BST a good idea or can we just use an rw_sem?
+- Think about (1, N) registers for posting messages to readers.
 - Complete definition of all operations.
 - Synchronization of everything, also thinking about the device file read operation.
-- Think about (1, N) registers for posting messages to readers.
+- Signals, interrupts, preemption and the like checks against deadlocks and similar problems.
 - Check against false cache sharing everywhere. Remember that one of our cache lines is 64-bytes long.
+- Anything still marked as TODO here.
 
 # EXTRAS
 - Module parameters consistency check at insertion, especially for max values and sizes of stuff.
