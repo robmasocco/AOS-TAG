@@ -16,11 +16,8 @@
 - Must be optimized for speed, "cache-like", possibly RCU.
 - Must be protected from concurrent access, using an rw_semaphore at least. An RCU implementation should especially synchronize writers using a mutex (wait time is not predictable, so we can't use a spinlock).
 
-## QUEUEING ARCHITECTURE
+## MESSAGE PUBLISHING ARCHITECTURE
 - Maybe we must embed in the general structure an array of structures that represent each level, with members that do what follows.
-- Levels must be RCU, one linked list or something per level, all pointed by a fixed-size list in the control
-structure for that instance. Maybe not lists, but something lock/wait-free nonetheless, like (1, N) registers
-with appropriate synchronization.
 - There must be a wait queue for each level.
 
 # OPERATIONS DETAILS
@@ -31,11 +28,11 @@ TODO
 
 ## *int tag_receive(int tag, int level, char\* buffer, size_t size)*
 
-TODO
+This is a *reader* thread.
 
 ## *int tag_send(int tag, int level, char\* buffer, size_t size)*
 
-TODO
+This is a *writer* thread.
 
 ## *int tag_ctl(int tag, int command)*
 
@@ -45,8 +42,8 @@ TODO
 
 ## SHARED INSTANCES ARRAY
 - Array of 256 structs with protected instance pointers, indexed by "tag descriptor".
-- Bitmask of free/used descriptors (consider fd_set?).
 - Two rw_semaphores or the like per each entry (that must then be a particular struct).
+- Bitmask of free/used descriptors (consider fd_set?).
 
 ## INSTANCE DATA STRUCTURE
 - Key.
@@ -54,9 +51,16 @@ TODO
 - Creator EUID.
 
 ## LEVEL DATA STRUCTURE
-- Wait queue.
-- RCU list of messages or something like that.
-- Bitmasks and stuff to wait on to monitor conditions for wait events (use those APIs).
+- Wait queue head.
+- Epoch index, atomically flipped.
+- Epoch array of two *message epoch* structs.
+- Spinlock to synchronize both readers and writers on the message epoch.
+- Bitmasks and stuff to wait on to monitor conditions for wait events (use those APIs). TODO
+
+### MESSAGE EPOCH STRUCT
+
+- Atomic counter of the readers registered in the level's wait queue for this epoch.
+- Pointer to the message buffer for this epoch.
 
 # MODULE PARAMETERS
 
@@ -121,10 +125,11 @@ TODO
 # TODO LIST
 
 - Is an RCU BST a good idea or can we just use an rw_sem?
-- Think about (1, N) registers for posting messages to readers.
+- How are signals implemented, and/or how should we check for them while running?
 - Complete definition of all operations.
 - Synchronization of everything, also thinking about the device file read operation.
 - Signals, interrupts, preemption and the like checks against deadlocks and similar problems.
+- Check TSO compliance everywhere, add memory fences where needed.
 - Check against false cache sharing everywhere. Remember that one of our cache lines is 64-bytes long.
 - Anything still marked as TODO here.
 
