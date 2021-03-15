@@ -30,9 +30,44 @@ TODO
 
 This is a *reader* thread.
 
+TODO return what?
+
+- TODO Instance access operations. ATOMIC FLAGS SET IN INTERRUPT-SAFE PLACES
+- Wait on the queue (with wait_event_interruptible(...) on condition byte).
+- Acquire level rwlock as reader (saving IRQ state).
+- Do a memcpy of the new message from the level buffer into an on-the-go-set array in the stack.
+- Acquire wait queue spinlock (without touching IRQ state).
+- If the wait queue is empty set the condition to zero.
+- Release wait queue spinlock (as above).
+- Release level rwlock as reader (restoring IRQ state).
+- Do a copy_to_user of the new message.
+
+TSO bypasses are avoided by executing memory barriers embedded in spinlocks and wait queue APIs.
+
+Ensure proper locks are released in each *if-else* to avoid deadlocks.
+
 ## *int tag_send(int tag, int level, char\* buffer, size_t size)*
 
 This is a *writer* thread.
+
+TODO return what?
+
+- TODO Instance access operations.
+- Do a copy_from_user into an on-the-go-set array in the stack.
+- Acquire level rwlock as writer (saving IRQ state): only one writer should be performing this at any given time.
+- Acquire wait queue spinlock (without touching IRQ state).
+- Check for active readers (use waitqueue_active(...)), exit if there's none.
+- Release wait queue spinlock (as above).
+- memcpy the message in the level buffer.
+- Set message size.
+- STORE MEMORY BARRIER
+- Set level condition value to 1.
+- Release level rwlock as writer (restoring IRQ state).
+- Wake up the entire wait queue (use wake_up(...) on the level wait queue).
+
+TSO bypasses are avoided by executing memory barriers embedded in spinlocks and wait queue APIs.
+
+Ensure proper locks are released in each *if-else* to avoid deadlocks.
 
 ## *int tag_ctl(int tag, int command)*
 
@@ -51,16 +86,11 @@ TODO
 - Creator EUID.
 
 ## LEVEL DATA STRUCTURE
-- Wait queue head.
-- Epoch index, atomically flipped.
-- Epoch array of two *message epoch* structs.
-- Spinlock to synchronize both readers and writers on the message epoch.
-- Bitmasks and stuff to wait on to monitor conditions for wait events (use those APIs). TODO
-
-### MESSAGE EPOCH STRUCT
-
-- Atomic counter of the readers registered in the level's wait queue for this epoch.
-- Pointer to the message buffer for this epoch.
+- Wait queue head (which embeds a spinlock).
+- Pointer to a preallocated 1 page-buffer (using kmalloc) (needed compromise between complexity and resource usage).
+- size_t size of the message currently stored.
+- rwlock_t to access the buffer and the message size.
+- A byte used as condition value for the wait queue.
 
 # MODULE PARAMETERS
 
@@ -74,9 +104,10 @@ Consider adding anything you might need to debug this module.
 
 # CHAR DEVICE DRIVER(s)
 
-Remeber to set the owner member!
+**Remember to set the owner member!**
 
 ## OPEN
+
 Nop.
 
 ## CLOSE
@@ -120,15 +151,19 @@ TODO
 
 ## POSTING A MESSAGE ON A LEVEL
 
+Each level structure embeds and rwlock_t: the writer takes it to post, updates the wakeup condition, releases it and wakes readers up. Readers acquire it to memcpy contents into an on-the-go-set array in the stack and release it afterwards (can't hold a spinlock while doing a sleeping call!); then, they call copy_to_user.
+
 TODO
 
 # TODO LIST
 
+- How should messages be delivered?
 - Is an RCU BST a good idea or can we just use an rw_sem?
-- How are signals implemented, and/or how should we check for them while running?
+- How are fd_sets implemented and used?
 - Complete definition of all operations.
+- Test multiple-locks scenarios.
 - Synchronization of everything, also thinking about the device file read operation.
-- Signals, interrupts, preemption and the like checks against deadlocks and similar problems.
+- Signals, interrupts, preemption and the like checks against deadlocks and similar problems. Remember that wait queues functions return -ERESTARTSYS when a signal was delivered and that signals are checked for upon return from interrupt or syscalls, so consider using local_locks to protect your (really) critical sections.
 - Check TSO compliance everywhere, add memory fences where needed.
 - Check against false cache sharing everywhere. Remember that one of our cache lines is 64-bytes long.
 - Anything still marked as TODO here.
