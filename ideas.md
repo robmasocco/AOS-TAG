@@ -28,48 +28,58 @@ TODO
 
 ## *int tag_receive(int tag, int level, char\* buffer, size_t size)*
 
-This is a *reader* thread.
+This configures the running thread as a *reader thread*.
 
-TODO return what?
+Returns 0 if the message was read, or -1 and *errno* is set to indicate the cause of the error.
 
-- TODO Instance access operations. ATOMIC FLAGS SET IN INTERRUPT-SAFE PLACES
+- *try_module_get*
+- Trylock receivers's rw_sem as reader.
+- Check instance pointer, eventually exit.
+- Check permissions, eventually exit.
 - Atomically read current condition value.
 - Wait on the queue (with *wait_event_interruptible(...)*) with condition according to current condition value (*if 0 wait on 1 else wait on 0*, an *if-else* should suffice).
-- Acquire level rwlock as reader (saving IRQ state).
+- Acquire level rwlock as reader.
 - *Memcpy* the new message from the level buffer into an on-the-go-set array in the stack.
-- Release level rwlock as reader (restoring IRQ state).
+- Release level rwlock as reader.
 - *Copy_to_user* the new message.
+- Release receivers's rw_sem as a reader.
+- *module_put*
 
 TSO bypasses are avoided by executing memory barriers embedded in spinlocks and wait queue APIs.
 
 Even if new readers register themselves on the queue, those just awoken should prevent writers from running until they get the newest message.
 
-Ensure proper locks are released in each *if-else* to avoid deadlocks.
+Ensure proper locks are released in each *if-else* to avoid deadlocks, and that the module is always released.
 
 ## *int tag_send(int tag, int level, char\* buffer, size_t size)*
 
-This is a *writer* thread.
+This configures the running thread as a *writer thread*.
 
-TODO return what?
+Returns 0 if the message was correctly sent, or -1 and *errno* is set to indicate the cause of the error.
 
-- TODO Instance access operations.
+- *try_module_get*
+- Trylock senders's rw_sem as reader.
+- Check instance pointer, eventually exit.
+- Check permissions, eventually exit.
 - *Copy_from_user* into an on-the-go-set array in the stack.
-- Acquire level rwlock as writer (saving IRQ state).
-- Acquire wait queue spinlock (without touching IRQ state).
+- Acquire level rwlock as writer.
+- Acquire wait queue spinlock.
 - Check for active readers (use *waitqueue_active(...)*), exit if there's none.
-- Release wait queue spinlock (as above).
+- Release wait queue spinlock.
 - *Memcpy* the message in the level buffer.
 - Set message size.
-- **STORE MEMORY BARRIER**
+- **STORE FENCE**
 - Atomically flip level condition value.
-- Release level rwlock as writer (restoring IRQ state).
+- Release level rwlock as writer.
 - Wake up the entire wait queue (use *wake_up(...)* on the level wait queue).
+- Release senders's rw_sem as a reader.
+- *module_put*
 
 TSO bypasses are avoided by executing memory barriers and those embedded in spinlocks and wait queue APIs.
 
 Only one writer should be active at any given time.
 
-Ensure proper locks are released in each *if-else* to avoid deadlocks.
+Ensure proper locks are released in each *if-else* to avoid deadlocks, and that the module is always released.
 
 ## *int tag_ctl(int tag, int command)*
 
@@ -77,10 +87,23 @@ TODO
 
 # DATA STRUCTURES AND TYPES
 
+## BST-DICTIONARY
+
+This dictionary holds *key-tag descriptor* pairs of the instances that were **NOT** created as *IPC_PRIVATE*, thus meant to be shared. Goes with an rw_semaphore to synchronize accesses (see below). Each node holds:
+
+- int key, the dictionary key.
+- int tag descriptor, index in the shared instances array.
+- A shitload of pointers to make the tree work as a linked structure.
+
 ## SHARED INSTANCES ARRAY
-- Array of 256 structs with protected instance pointers, indexed by "tag descriptor".
-- Two rw_semaphores or the like per each entry (that must then be a particular struct).
-- Bitmask of free/used descriptors (consider fd_set?).
+
+Array of 256 structs with protected instance pointers, indexed by "tag descriptor". Goes with a bitmask of free/used tag descriptors (consider an *fd_set*?) (?).
+
+Each entry holds:
+
+- Pointer to the corresponding instance data structure, meant to be NULL when the instance hasn't been created.
+- Receivers rw_semaphore.
+- Senders rw_semaphore.
 
 ## INSTANCE DATA STRUCTURE
 - Key.
@@ -106,7 +129,7 @@ Consider adding anything you might need to debug this module.
 
 # CHAR DEVICE DRIVER(s)
 
-**Remember to set the owner member!**
+**Remember to set the *owner* member!**
 
 ## OPEN
 
@@ -137,45 +160,46 @@ What about IPC_PRIVATE? Which routines would need to be called?
 Develop the baseline version first, then make sure it is doable and discuss it with Quaglia to avoid conflicts with the specification. Could be a nice addition.
 
 # SYNCHRONIZATION
-## ACCESS TO AN INSTANCE, REMOVAL
-There are 3 kinds of threads: receivers, senders, removers.
-Keep in mind that senders and removers always return, never deadlock, so their critical section time is always constant.
-Each entry in the array holds two rw_semaphores and a pointer.
-Remember that "lock" and "unlock" are called "down" and "up" for semaphores.
-The first rw_sem is for receivers as readers, the second is for senders as readers, both are for removers as writers.
-When a remover comes, it trylocks the receivers's one as a writer, then eventually locks the senders's one as a writer, then flips the instance pointer to NULL, releases both locks and does its thing.
-When a receiver comes it trylocks its semaphore as reader, checks the pointer, eventually does its thing and unlocks its semaphore as reader.
-When a sender comes it trylocks its semaphore as reader, checks the pointer, eventually does its thing and unlocks the semaphore as reader.
+
+**At first, each operation should be protected with a *try_module_get/module_put* pair, the very first and last instructions of each system call, to ensure that the data structures we're about to access don't magically fade away whilst we're operating on them.**
 
 ## ACCESS TO THE BST-DICTIONARY
 
-TODO
+There's just an rw_semaphore to acquire and release: as a reader when making a query, as a writer when cutting an instance out.
+
+## ACCESS TO AN INSTANCE, REMOVAL
+
+There are 3 kinds of threads: *receivers*, *senders*, *removers*.
+
+Keep in mind that senders and removers always return, never deadlock, so their critical section time is always constant. Each entry in the array holds two rw_semaphores and a pointer. Remember that *lock* and *unlock* are called *down* and *up* for semaphores. The first rw_sem is for receivers as readers, the second is for senders as readers, both are for removers as writers.
+
+When a remover comes, it trylocks the receivers's one as a writer, then **eventually** locks the senders's one as a writer, then flips the instance pointer to NULL, releases both locks and does its thing.
+
+When a receiver comes it trylocks its semaphore as reader, checks the pointer, eventually does its thing and unlocks its semaphore as reader.
+
+When a sender comes it trylocks its semaphore as reader, checks the pointer, eventually does its thing and unlocks the semaphore as reader.
+
+Don't use the *_interruptible* variants of rw_semaphores's APIs, so signals won't kick our butt.
 
 ## POSTING A MESSAGE ON A LEVEL
 
-Each level structure embeds and *rwlock_t*: the writer takes it to post, updates the wakeup condition, releases it and wakes readers up. Readers acquire it to memcpy contents into an on-the-go-set array in the stack and release it afterwards (can't hold a spinlock while doing a sleeping call!); then, they call *copy_to_user*. Buffers are preallocated for each level (a single page, compromise between complexity and resource usage).
+Each level structure embeds an *rwlock_t*: the writer takes it to post, updates the wakeup condition, releases it and wakes readers up. Readers acquire it to *memcpy* contents into an on-the-go-set array in the stack and release it afterwards (can't hold a spinlock while doing a sleeping call!); then, they call *copy_to_user*. Buffers are preallocated for each level (a single page, compromise between complexity and resource usage).
 
 The wakeup condition is a single value which is flipped each time a writer posts a message, and readers will always wait on the opposite value; thus, this works as a linearization point for the level data structure (evident if you see the pseudocode above).
 
 # TODO LIST
 
-- Is an RCU BST a good idea or can we just use an rw_sem?
 - How are fd_sets implemented and used?
 - Complete definition of all operations.
 - Test multiple-locks scenarios.
 - Synchronization of everything, also thinking about the device file read operation.
-- Signals, interrupts, preemption and the like checks against deadlocks and similar problems. Remember that wait queues functions return -ERESTARTSYS when a signal was delivered and that signals are checked for upon return from interrupt or syscalls, so consider using local_locks to protect your (really) critical sections.
+- Signals, interrupts, preemption and the like checks against deadlocks and similar problems. Remember that wait queues functions return *-ERESTARTSYS* when a signal was delivered. Consider using local_locks to protect your (really) critical sections. See our little golden screenshot from our course materials to know how signals work (and remember: they're usermode shit, you just return -EINTR).
 - Check TSO compliance everywhere, add memory fences where needed.
 - Check against false cache sharing everywhere. Remember that one of our cache lines is 64-bytes long.
 - Anything still marked as TODO here.
 
 # EXTRAS
 - Module parameters consistency check at insertion, especially for max values and sizes of stuff.
-- Carefully think about what to expose as a module parameter (logic-less) and what needs more complexity,
-thus requiring a device file.
-- Signals support in system calls: handlers will be called upon return to user mode, so all you have
-to do is place threads on an interruptible wait queue, check for pending signals and in case release all locks and return -EINTR from system calls. This is because signals are a user mode facility. Test this first.
-- Module locking: module "put" and "get" to prevent removal.
 - Splay trees as BSTs, using join-based alternative for deletion (to avoid splaying the predecessor to the top)
 and make nodes (structures) cache-aligned (in GCC: "struct ... {...} ... __attribute__ ((aligned (L1_CACHE_BYTES)));").
 - MODULE_INFO stuff!
