@@ -1,5 +1,7 @@
 # GENERAL ARCHITECTURE NOTES
 
+Use this space as a brainstorming table for whatever you need to discuss before definition.
+
 ## KERNEL-SIDE ARCHITECTURE
 
 - Centralized architecture: there's only one binary search tree to lookup active instances, register new ones, or delete existing ones from. Indexed by keys, each entry contains the tag descriptor for that instance, if present. Max 256 nodes should be allowed. Only for shared instances.
@@ -15,10 +17,6 @@
 - Each entry is an int "tag descriptor", index in the array.
 - Must be optimized for speed, "cache-like".
 - Must be protected from concurrent access, using an rw_semaphore at least.
-
-## MESSAGE PUBLISHING ARCHITECTURE
-- Maybe we must embed in the general structure an array of structures that represent each level, with members that do what follows.
-- There must be a wait queue for each level.
 
 # OPERATIONS DETAILS
 
@@ -97,7 +95,7 @@ This dictionary holds *key-tag descriptor* pairs of the instances that were **NO
 
 ## SHARED INSTANCES ARRAY
 
-Array of 256 structs with protected instance pointers, indexed by "tag descriptor". Goes with a bitmask of free/used tag descriptors (consider an *fd_set*?) (?).
+Array of 256 structs with protected instance pointers, indexed by "tag descriptor". Goes with a bitmask of free/used tag descriptors, with macros to efficiently access it.
 
 Each entry holds:
 
@@ -189,10 +187,11 @@ The wakeup condition is a single value which is flipped each time a writer posts
 
 # TODO LIST
 
-- How are fd_sets implemented and used?
-- Complete definition of all operations.
+- Bitmask API, with efficient management and consistency checks against maximum possible value.
+- BST-Dictionary implementation.
+- Complete definition of all operations, both syscalls and device drivers.
+- Synchronization schemes for everything, also thinking about the device file read operation.
 - Test multiple-locks scenarios.
-- Synchronization of everything, also thinking about the device file read operation.
 - Signals, interrupts, preemption and the like checks against deadlocks and similar problems. Remember that wait queues functions return *-ERESTARTSYS* when a signal was delivered. Consider using local_locks to protect your (really) critical sections. See our little golden screenshot from our course materials to know how signals work (and remember: they're usermode shit, you just return -EINTR).
 - Check TSO compliance everywhere, add memory fences where needed.
 - Check against false cache sharing everywhere. Remember that one of our cache lines is 64-bytes long.
