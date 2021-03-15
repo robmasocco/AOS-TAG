@@ -13,8 +13,8 @@
 - Represents key-instance associations.
 - Is indexed by int keys.
 - Each entry is an int "tag descriptor", index in the array.
-- Must be optimized for speed, "cache-like", possibly RCU.
-- Must be protected from concurrent access, using an rw_semaphore at least. An RCU implementation should especially synchronize writers using a mutex (wait time is not predictable, so we can't use a spinlock).
+- Must be optimized for speed, "cache-like".
+- Must be protected from concurrent access, using an rw_semaphore at least.
 
 ## MESSAGE PUBLISHING ARCHITECTURE
 - Maybe we must embed in the general structure an array of structures that represent each level, with members that do what follows.
@@ -163,6 +163,8 @@ Develop the baseline version first, then make sure it is doable and discuss it w
 
 **At first, each operation should be protected with a *try_module_get/module_put* pair, the very first and last instructions of each system call, to ensure that the data structures we're about to access don't magically fade away whilst we're operating on them.**
 
+Don't use the *_interruptible* variants of rw_semaphores's APIs, so signals won't kick our butt.
+
 ## ACCESS TO THE BST-DICTIONARY
 
 There's just an rw_semaphore to acquire and release: as a reader when making a query, as a writer when cutting an instance out.
@@ -178,8 +180,6 @@ When a remover comes, it trylocks the receivers's one as a writer, then **eventu
 When a receiver comes it trylocks its semaphore as reader, checks the pointer, eventually does its thing and unlocks its semaphore as reader.
 
 When a sender comes it trylocks its semaphore as reader, checks the pointer, eventually does its thing and unlocks the semaphore as reader.
-
-Don't use the *_interruptible* variants of rw_semaphores's APIs, so signals won't kick our butt.
 
 ## POSTING A MESSAGE ON A LEVEL
 
