@@ -24,7 +24,7 @@ Use this space as a brainstorming table for whatever you need to discuss before 
 
 TODO
 
-## *int tag_receive(int tag, int level, char\* buffer, size_t size)*
+## *int tag_receive(int tag, int level, char \*buffer, size_t size)*
 
 This configures the running thread as a *reader thread*.
 
@@ -34,13 +34,17 @@ Returns 0 if the message was read, or -1 and *errno* is set to indicate the caus
 - Trylock receivers's rw_sem as reader.
 - Check instance pointer, eventually exit.
 - Check permissions, eventually exit.
-- Atomically read current condition value.
-- Wait on the queue (with *wait_event_interruptible(...)*) with condition according to current condition value (*if 0 wait on 1 else wait on 0*, an *if-else* should suffice).
+- Acquire condition rw_sem as reader.
+- Read current condition value.
+- Atomically increment epoch presence counter.
+- Release condition rw_sem as reader.
+- Wait on the queue (with *wait_event_interruptible(...)*) with condition according to current condition value (*if 0 wait on 1 else wait on 0*, an *if-else* should suffice). Catch signals here and be very careful about which locks to release and counters to atomically decrease upon exit!!!
 - Acquire level rwlock as reader.
 - *Memcpy* the new message from the level buffer into an on-the-go-set array in the stack.
+- Atomically decrease epoch presence counter (with preemption disabled!).
 - Release level rwlock as reader.
+- Release receivers's rw_sem as a reader (no need to delay this further).
 - *Copy_to_user* the new message.
-- Release receivers's rw_sem as a reader.
 - *module_put*
 
 TSO bypasses are avoided by executing memory barriers embedded in spinlocks and wait queue APIs.
@@ -49,7 +53,7 @@ Even if new readers register themselves on the queue, those just awoken should p
 
 Ensure proper locks are released in each *if-else* to avoid deadlocks, and that the module is always released.
 
-## *int tag_send(int tag, int level, char\* buffer, size_t size)*
+## *int tag_send(int tag, int level, char \*buffer, size_t size)*
 
 This configures the running thread as a *writer thread*.
 
@@ -60,16 +64,21 @@ Returns 0 if the message was correctly sent, or -1 and *errno* is set to indicat
 - Check instance pointer, eventually exit.
 - Check permissions, eventually exit.
 - *Copy_from_user* into an on-the-go-set array in the stack.
-- Acquire level rwlock as writer.
+- Acquire level writers mutex.
 - Acquire wait queue spinlock.
 - Check for active readers (use *waitqueue_active(...)*), exit if there's none.
 - Release wait queue spinlock.
+- Acquire level rwlock as writer.
 - *Memcpy* the message in the level buffer.
 - Set message size.
 - **STORE FENCE**
-- Atomically flip level condition value.
 - Release level rwlock as writer.
+- Acquire condition rw_sem as writer.
+- Flip level condition value (a XOR with 0x1 should suffice).
 - Wake up the entire wait queue (use *wake_up(...)* on the level wait queue).
+- Busy-wait on the epoch presence counter to become zero.
+- Release condition rw_sem as writer.
+- Release level writers mutex.
 - Release senders's rw_sem as a reader.
 - *module_put*
 
@@ -109,11 +118,15 @@ Each entry holds:
 - Creator EUID.
 
 ## LEVEL DATA STRUCTURE
+
 - Wait queue head (which embeds a spinlock).
 - Pointer to a preallocated 1 page-buffer (using kmalloc).
 - size_t size of the message currently stored.
-- rwlock_t to access the buffer and the message size.
-- Single char/int used as atomic condition value for the wait queue.
+- rwlock_t "level rwlock" to access the buffer and the message size. This is probably redundant as per the above pseudocode, but prevents illicit access to the buffer and helps make read/write operations very fast by disabling preemption.
+- Mutex to mutually exclude writers.
+- Single char/int used as condition value for the wait queue.
+- rw_sem "condition rw_sem" to synchronize readers and writers together. This has to be sleeping since it has to allow existing readers to consume the message (the writer might also exchange its place for one of them this way, freeing an additional CPU core).
+- Atomic epoch presence counter, to have writers wait for all registered readers when a message is delivered.
 
 # MODULE PARAMETERS
 
@@ -185,6 +198,8 @@ Each level structure embeds an *rwlock_t*: the writer takes it to post, updates 
 
 The wakeup condition is a single value which is flipped each time a writer posts a message, and readers will always wait on the opposite value; thus, this works as a linearization point for the level data structure (evident if you see the pseudocode above).
 
+The condition value is protected by an rwlock, and there's also an atomic presence counter to distinguish between the moments when a message has been posted and has yet to be posted in a concurrent scenario for the readers, and make writers wait for all readers that got a condition value. This allows for some degree of concurrency, but heavily relies on having the wait queues APIs check the condition before going to sleep and the disabling of preemption enforced by spinning locks.
+
 # TODO LIST
 
 - Bitmask API, with efficient management and consistency checks against maximum possible value.
@@ -198,8 +213,9 @@ The wakeup condition is a single value which is flipped each time a writer posts
 - Anything still marked as TODO here.
 
 # EXTRAS
+
 - Module parameters consistency check at insertion, especially for max values and sizes of stuff.
 - Splay trees as BSTs, using join-based alternative for deletion (to avoid splaying the predecessor to the top)
-and make nodes (structures) cache-aligned (in GCC: "struct ... {...} ... __attribute__ ((aligned (L1_CACHE_BYTES)));").
+and make nodes (structures) cache-aligned (in GCC: "struct ... {...} ... \__attribute__ ((aligned (L1_CACHE_BYTES)));").
 - MODULE_INFO stuff!
 - A more complete device driver?
