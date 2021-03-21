@@ -37,7 +37,7 @@ Returns the tag descriptor (array index) of the new instance, or -1 and *errno* 
     - Release the tree rw_sem as a reader.
 - If *command* is *TAG_CREATE*:
     - Acquire fd_set spinlock (allowing IRQs).
-    - Linearly scan the set to find a free entry in the array, then set it and save the index (use *FD_ISSET* and *FD_SET*).
+    - Linearly scan the set to find a free entry in the array, then add it to the set and save the index (use *!FD_ISSET* and *FD_SET*).
     - Release fd_set spinlock (as above).
     - Allocate and accordingly initialize a new instance struct.
     - Acquire both rw_sems as writer.
@@ -50,6 +50,8 @@ Returns the tag descriptor (array index) of the new instance, or -1 and *errno* 
 - *module_put*
 - Return.
 
+Ensure proper locks are released in each *if-else* to avoid deadlocks, and that the module is always released.
+
 ## *int tag_receive(int tag, int level, char \*buffer, size_t size)*
 
 This configures the running thread as a *reader thread*.
@@ -58,7 +60,7 @@ Returns 0 if the message was read, or -1 and *errno* is set to indicate the caus
 
 - *try_module_get*
 - Consistency checks on input arguments.
-- Trylock receivers's rw_sem as reader.
+- Lock receivers's rw_sem as reader (use the *_interruptible* variant here).
 - Check instance pointer, eventually exit.
 - Check permissions if required (flag), eventually exit.
 - Acquire condition rw_sem as reader (this might be *_interruptible*).
@@ -85,11 +87,13 @@ Ensure proper locks are released in each *if-else* to avoid deadlocks, and that 
 
 This configures the running thread as a *writer thread*.
 
+Might have to act in a particular way if messages have length zero, to not disturb *copy* APIs and the like.
+
 Returns 0 if the message was correctly sent, or -1 and *errno* is set to indicate the cause of the error.
 
 - *try_module_get*
 - Consistency checks on input arguments.
-- Trylock senders's rw_sem as reader.
+- Lock senders's rw_sem as reader.
 - Check instance pointer, eventually exit.
 - Check permissions if required (flag), eventually exit.
 - *Copy_from_user* into an on-the-go-set array in the stack.
@@ -121,14 +125,32 @@ Ensure proper locks are released in each *if-else* to avoid deadlocks, and that 
 
 ## *int tag_ctl(int tag, int command)*
 
-TODO
+Allows the calling thread to awake all readers potentially waiting on any level of an instance, or to remove an instance.
 
-TODO Remove: acquire tree sem as writer, acquire instance as below, check key and eventually delete from tree, release tree sem as writer
+Returns 0 if the requested operation was completed successfully, or -1 and *errno* is set to indicate the cause of the error.
 
 - *try_module_get*
 - Consistency checks on input arguments.
+- If *command* is *AWAKE_ALL*:
+    - Call a write with a zero-length message on all levels, reusing the *send* routine.
+- If *command* is *REMOVE*:
+    - Trylock receivers rw_sem as writer, exit if at least a reader is there.
+    - Lock senders rw_sem as writer.
+    - Save instance struct pointer and set it to *NULL*.
+    - Release senders rw_sem as writer.
+    - Release receivers rw_sem as writer.
+    - Check the key, if it is not *IPC_PRIVATE*:
+        - Acquire the tree rw_sem as writer.
+        - Remove the entry from the tree.
+        - Release the tree rw_sem as writer.
+    - Acquire fd_set spinlock (allowing IRQs).
+    - Remove the tag descriptor from the set (using *FD_CLR*).
+    - Release fd_set spinlock (as above).
+    - Set creator EUID to zero (for security), then *kfree* instance struct.
 - *module_put*
 - Return.
+
+Ensure proper locks are released in each *if-else* to avoid deadlocks, and that the module is always released.
 
 # DATA STRUCTURES AND TYPES
 
