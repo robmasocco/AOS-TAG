@@ -39,10 +39,10 @@ Returns 0 if the message was read, or -1 and *errno* is set to indicate the caus
 - Atomically increment epoch presence counter.
 - Release condition rw_sem as reader.
 - Wait on the queue (with *wait_event_interruptible(...)*) with condition according to current condition value (*if 0 wait on 1 else wait on 0*, an *if-else* should suffice). Catch signals here and be very careful about which locks to release and counters to atomically decrease upon exit!!!
-- Acquire level rwlock as reader.
-- *Memcpy* the new message from the level buffer into an on-the-go-set array in the stack.
+- *preempt_disable()*
+- *memcpy* the new message from the level buffer into an on-the-go-set array in the stack.
 - Atomically decrease epoch presence counter (with preemption disabled!).
-- Release level rwlock as reader.
+- *preempt_enable()*
 - Release receivers's rw_sem as a reader (no need to delay this further).
 - *Copy_to_user* the new message.
 - *module_put*
@@ -68,11 +68,11 @@ Returns 0 if the message was correctly sent, or -1 and *errno* is set to indicat
 - Acquire wait queue spinlock.
 - Check for active readers (use *waitqueue_active(...)*), exit if there's none.
 - Release wait queue spinlock.
-- Acquire level rwlock as writer.
-- *Memcpy* the message in the level buffer.
+- *preempt_disable()*
+- *memcpy* the message in the level buffer.
 - Set message size.
 - **STORE FENCE**
-- Release level rwlock as writer.
+- *preempt_enable()*
 - Acquire condition rw_sem as writer.
 - Flip level condition value (a XOR with 0x1 should suffice).
 - Wake up the entire wait queue (use *wake_up(...)* on the level wait queue).
@@ -194,11 +194,11 @@ When a sender comes it trylocks its semaphore as reader, checks the pointer, eve
 
 ## POSTING A MESSAGE ON A LEVEL
 
-Each level structure embeds an *rwlock_t*: the writer takes it to post, updates the wakeup condition, releases it and wakes readers up. Readers acquire it to *memcpy* contents into an on-the-go-set array in the stack and release it afterwards (can't hold a spinlock while doing a sleeping call!); then, they call *copy_to_user*. Buffers are preallocated for each level (a single page, compromise between complexity and resource usage).
+The writer posts a message in the level buffer (together with its size), updates the wakeup condition, then wakes readers up. Readers *memcpy* contents into an on-the-go-set array in the stack; then, they call *copy_to_user*. Buffers are preallocated for each level (a single page, compromise between complexity and resource usage). These sections run with preemption disabled for the sake of speed.
 
 The wakeup condition is a single value which is flipped each time a writer posts a message, and readers will always wait on the opposite value; thus, this works as a linearization point for the level data structure (evident if you see the pseudocode above).
 
-The condition value is protected by an rwlock, and there's also an atomic presence counter to distinguish between the moments when a message has been posted and has yet to be posted in a concurrent scenario for the readers, and make writers wait for all readers that got a condition value. This allows for some degree of concurrency, but heavily relies on having the wait queues APIs check the condition before going to sleep and the disabling of preemption enforced by spinning locks.
+The condition value is protected by an rw_sem and there's also an atomic presence counter to distinguish between the moments when a message has been posted and has yet to be posted in a concurrent scenario for the readers, and make writers wait for all readers that got a condition value. This allows for some degree of concurrency, but heavily relies on having the wait queues APIs check the condition before going to sleep. Reading the current condition value at first, before atomically incrementing the presence counter, is very important to synch with the state, avoid deadlocks and be waited by the very next writer.
 
 # TODO LIST
 
@@ -219,3 +219,4 @@ The condition value is protected by an rwlock, and there's also an atomic presen
 and make nodes (structures) cache-aligned (in GCC: "struct ... {...} ... \__attribute__ ((aligned (L1_CACHE_BYTES)));").
 - MODULE_INFO stuff!
 - A more complete device driver?
+- Routines should be embedded into functions, to simplify code-writing, system calls definitions and device drivers coding (if we ever get to that).
