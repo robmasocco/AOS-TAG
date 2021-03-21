@@ -152,19 +152,35 @@ Consider adding anything you might need to debug this module.
 
 # CHAR DEVICE DRIVER
 
-**Remember to set the *owner* member!**
+**Remember to set the *owner* member to _THIS\_MODULE_!**
+
+Compute a fair exceeding estimate of the buffer size in *init_module*, using 80 chars lines * 32 levels * how many max instances the module is started with.
+
+Return *-ENOMEM* or similar on open if allocation fails or memory is insufficient.
+
+Write stuff on lines, separating data with tabs.
 
 ## OPEN
 
-Nop.
+TODO Get system state (the only system-locking portion) and compose device file contents in a buffer; use like a matrix in the stack. Use the *private_data* member to point to the buffer.
 
 ## CLOSE
 
-Nop.
+- Release the buffer.
+- Set *private_data* to *NULL*.
+- Return 0. Nothing can go wrong.
 
 ## READ
 
-TODO
+TODO *copy_to_user* stuff from the buffer, with size checks, return values, EOF setting, f_pos advancing and shit.
+
+## LSEEK
+
+Reset *f_pos* as requested (if possible).
+
+## WRITE
+
+Nop.
 
 ## IOCTL
 
@@ -178,7 +194,7 @@ Nop (for now).
 
 A char device driver is required for these, maybe more than one or some minor-based behaviour.
 ## STATUS
-As requested, line-by-line status report. Located in /dev.
+As requested, line-by-line status report. Located in /dev. Named */dev/aos_tag*.
 
 ## I/O (?)
 
