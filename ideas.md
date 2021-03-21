@@ -123,6 +123,8 @@ Ensure proper locks are released in each *if-else* to avoid deadlocks, and that 
 
 TODO
 
+TODO Remove: acquire tree sem as writer, acquire instance as below, check key and eventually delete from tree, release tree sem as writer
+
 - *try_module_get*
 - Consistency checks on input arguments.
 - *module_put*
@@ -244,11 +246,11 @@ There are 3 kinds of threads: *receivers*, *senders*, *removers*.
 
 Keep in mind that senders and removers always return, never deadlock, so their critical section time is always constant. Each entry in the array holds two rw_semaphores and a pointer. Remember that *lock* and *unlock* are called *down* and *up* for semaphores. The first rw_sem is for receivers as readers, the second is for senders as readers, both are for removers as writers.
 
-When a remover comes, it trylocks the receivers's one as a writer, then **eventually** locks the senders's one as a writer, then flips the instance pointer to NULL, releases both locks and does its thing.
+When a remover comes, it trylocks the receivers's one as a writer, then **eventually** locks the senders's one as a writer, then flips the instance pointer to NULL, releases both locks and does its thing **afterwards** for the sake of speed. Note that the first trylock could mean either that the instance is really there but there's at least one writer in it, or that the instance isn't there, so nothing to do either way.
 
-When a receiver comes it trylocks its semaphore as reader, checks the pointer, eventually does its thing and unlocks its semaphore as reader.
-
-When a sender comes it trylocks its semaphore as reader, checks the pointer, eventually does its thing and unlocks the semaphore as reader.
+When a receiver comes it locks its semaphore as reader, checks the pointer, eventually does its thing and unlocks its semaphore as reader.
+When a sender comes it locks its semaphore as reader, checks the pointer, eventually does its thing and unlocks the semaphore as reader.
+These are both real locks since potential writers are *removers* and *adders*, and both have a very short and deterministic critical section, and are deadlock-proof.
 
 Things are a little bit different when *adding* an instance: at first, the bitmask is atomically checked for a free spot, then the *adder thread* locks both rw_sems as a writer since being the pointer *NULL*, eventual readers/writers would almost immediately get out, then sets the pointer to that of a new instance struct.
 
