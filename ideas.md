@@ -172,7 +172,7 @@ TODO Get system state (the only system-locking portion) and compose device file 
 
 ## READ
 
-TODO *copy_to_user* stuff from the buffer, with size checks, return values, EOF setting, f_pos advancing and shit.
+*copy_to_user* stuff from the buffer, with size checks, return values, EOF setting, f_pos advancing and shit.
 
 ## LSEEK
 
@@ -188,7 +188,7 @@ Nop.
 
 ## Any other op that might be required to make this work
 
-Nop (for now).
+Nop.
 
 # DEVICE FILE(s)
 
