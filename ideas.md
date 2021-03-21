@@ -122,7 +122,6 @@ Each entry holds:
 - Wait queue head (which embeds a spinlock).
 - Pointer to a preallocated 1 page-buffer (using kmalloc).
 - size_t size of the message currently stored.
-- rwlock_t "level rwlock" to access the buffer and the message size. This is probably redundant as per the above pseudocode, but prevents illicit access to the buffer and helps make read/write operations very fast by disabling preemption.
 - Mutex to mutually exclude writers.
 - Single char/int used as condition value for the wait queue.
 - rw_sem "condition rw_sem" to synchronize readers and writers together. This has to be sleeping since it has to allow existing readers to consume the message (the writer might also exchange its place for one of them this way, freeing an additional CPU core).
