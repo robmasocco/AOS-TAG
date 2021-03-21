@@ -243,6 +243,9 @@ Nop.
 # DEVICE FILE(s)
 
 A char device driver is required for these, maybe more than one or some minor-based behaviour.
+
+To create a device file in */dev* inside *init_module* specifying your device driver have a look at [this](https://stackoverflow.com/questions/49350553/can-i-call-mknod-from-my-kernel-module).
+
 ## STATUS
 As requested, line-by-line status report. Located in /dev. Named */dev/aos_tag*.
 
@@ -293,7 +296,7 @@ The condition value is protected by an rw_sem and there's also an atomic presenc
 - Check TSO compliance everywhere, add memory fences where needed.
 - Check against false cache sharing everywhere. Remember that one of our cache lines is 64-bytes long.
 - Anything still marked as TODO here.
-- Load and unload scripts, that handle *insmod*, *mknod*, *rmmod* and *rm* accordingly.
+- Load and unload scripts, that handle *insmod*, *rmmod* and possibly compilation accordingly.
 
 # EXTRAS
 
