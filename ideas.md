@@ -9,6 +9,7 @@ Use this space as a brainstorming table for whatever you need to discuss before 
 - In the array structures, first things checked by every syscall are the semaphores, then IMMEDIATELY the validity of the pointer. Maybe the next free index could be looked up with a bitmask, like fd_set.
 - The device file driver only has to lock and scan the array.
 - Permissions are implemented as simple checks of the current EUID against the creator's EUID when a thread does a tag_get. Such EUID is stored upon creation of the instance and checked each time it is reopened.
+- When loaded, this does a *try_module_get* on the *scth* module in the *init_module*, which is a dependency, releasing it with a *module_put* in *cleanup_module*.
 
 ## BINARY SEARCH TREE
 
@@ -22,7 +23,11 @@ Use this space as a brainstorming table for whatever you need to discuss before 
 
 ## *int tag_get(int key, int command, int permission)*
 
-TODO
+TODO Set permissions flag in the instance struct.
+
+- *try_module_get*
+- Consistency checks on input arguments.
+- *module_put*
 
 ## *int tag_receive(int tag, int level, char \*buffer, size_t size)*
 
@@ -31,9 +36,10 @@ This configures the running thread as a *reader thread*.
 Returns 0 if the message was read, or -1 and *errno* is set to indicate the cause of the error.
 
 - *try_module_get*
+- Consistency checks on input arguments.
 - Trylock receivers's rw_sem as reader.
 - Check instance pointer, eventually exit.
-- Check permissions, eventually exit.
+- Check permissions if required (flag), eventually exit.
 - Acquire condition rw_sem as reader.
 - Read current condition value.
 - Atomically increment epoch presence counter.
@@ -60,9 +66,10 @@ This configures the running thread as a *writer thread*.
 Returns 0 if the message was correctly sent, or -1 and *errno* is set to indicate the cause of the error.
 
 - *try_module_get*
+- Consistency checks on input arguments.
 - Trylock senders's rw_sem as reader.
 - Check instance pointer, eventually exit.
-- Check permissions, eventually exit.
+- Check permissions if required (flag), eventually exit.
 - *Copy_from_user* into an on-the-go-set array in the stack.
 - Acquire level writers mutex.
 - Acquire wait queue spinlock.
@@ -78,6 +85,7 @@ Returns 0 if the message was correctly sent, or -1 and *errno* is set to indicat
 - Wake up the entire wait queue (use *wake_up(...)* on the level wait queue).
 - Busy-wait on the epoch presence counter to become zero.
 - Release condition rw_sem as writer.
+- *memset* level buffer to 0 and set size to 0 (for security).
 - Release level writers mutex.
 - Release senders's rw_sem as a reader.
 - *module_put*
@@ -91,6 +99,10 @@ Ensure proper locks are released in each *if-else* to avoid deadlocks, and that 
 ## *int tag_ctl(int tag, int command)*
 
 TODO
+
+- *try_module_get*
+- Consistency checks on input arguments.
+- *module_put*
 
 # DATA STRUCTURES AND TYPES
 
@@ -116,6 +128,7 @@ Each entry holds:
 - Key.
 - Array of 32 level data structures.
 - Creator EUID.
+- Protection enabled flag. Set by *tag_get* upon instance creation, enables permissions checks.
 
 ## LEVEL DATA STRUCTURE
 
@@ -137,7 +150,7 @@ Consider adding anything you might need to debug this module.
 - Currently active instances (read-only).
 - Currently waiting threads on any level (read-only).
 
-# CHAR DEVICE DRIVER(s)
+# CHAR DEVICE DRIVER
 
 **Remember to set the *owner* member!**
 
@@ -153,6 +166,10 @@ Nop.
 
 TODO
 
+## IOCTL
+
+Nop.
+
 ## Any other op that might be required to make this work
 
 Nop (for now).
@@ -167,7 +184,7 @@ As requested, line-by-line status report. Located in /dev.
 
 A generic userland thread becomes a writer/reader through these device files.
 What about IPC_PRIVATE? Which routines would need to be called?
-Develop the baseline version first, then make sure it is doable and discuss it with Quaglia to avoid conflicts with the specification. Could be a nice addition.
+Develop the baseline version first, then make sure it is doable and discuss it with Quaglia to avoid conflicts with the specification. Could be a nice addition. Might require a different device driver, or an extension of that using the minor number.
 
 # SYNCHRONIZATION
 
@@ -210,12 +227,16 @@ The condition value is protected by an rw_sem and there's also an atomic presenc
 - Check TSO compliance everywhere, add memory fences where needed.
 - Check against false cache sharing everywhere. Remember that one of our cache lines is 64-bytes long.
 - Anything still marked as TODO here.
+- Load and unload scripts, that handle *insmod*, *mknod*, *rmmod* and *rm* accordingly.
 
 # EXTRAS
 
 - Module parameters consistency check at insertion, especially for max values and sizes of stuff.
+- GCC error message if kernel version is older than 4.17.
+- Error checks and errno settings everywhere.
 - Splay trees as BSTs, using join-based alternative for deletion (to avoid splaying the predecessor to the top)
 and make nodes (structures) cache-aligned (in GCC: "struct ... {...} ... \__attribute__ ((aligned (L1_CACHE_BYTES)));").
 - MODULE_INFO stuff!
 - A more complete device driver?
 - Routines should be embedded into functions, to simplify code-writing, system calls definitions and device drivers coding (if we ever get to that).
+- Definitions of system call numbers for the user code given by *make* after module insertion using *awk* to read numbers from pseudofiles.
