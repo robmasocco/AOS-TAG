@@ -63,6 +63,7 @@ Returns 0 if the message was read, or -1 and *errno* is set to indicate the caus
 - Lock receivers's rw_sem as reader (use the *_interruptible* variant here).
 - Check instance pointer, eventually exit.
 - Check permissions if required (flag), eventually exit.
+- Atomically increment level readers counter in the instance struct.
 - Acquire condition rw_sem as reader (this might be *_interruptible*).
 - Read current condition value.
 - Atomically increment epoch presence counter.
@@ -71,6 +72,7 @@ Returns 0 if the message was read, or -1 and *errno* is set to indicate the caus
 - *preempt_disable()*
 - *memcpy* the new message from the level buffer into an on-the-go-set array in the stack.
 - Atomically decrease epoch presence counter (with preemption disabled!).
+- Atomically decrease level readers counter in the instance struct (this too with preemption disabled, because why not?).
 - *preempt_enable()*
 - Release receivers's rw_sem as a reader (no need to delay this further).
 - *Copy_to_user* the new message.
@@ -173,6 +175,7 @@ Each entry holds:
 - Pointer to the corresponding instance data structure, meant to be NULL when the instance hasn't been created.
 - Receivers rw_semaphore.
 - Senders rw_semaphore.
+- Array of 32 atomic counters, one for each level, to count the readers.
 
 ## INSTANCE DATA STRUCTURE
 - Key.
@@ -220,7 +223,7 @@ TODO Get system state (the only system-locking portion) and compose device file 
 
 - Release the buffer.
 - Set *private_data* to *NULL*.
-- Return 0. Nothing can go wrong.
+- Return 0. Nothing can go wrong (maybe only *kfree*, should we trace it?).
 
 ## READ
 
