@@ -210,6 +210,8 @@ Return *-ENOMEM* or similar on open if allocation fails or memory is insufficien
 
 Write stuff on lines, separating data with tabs.
 
+Compute the size of the file as you produce it with subsequent calls to _sprintf_.l, and store it in a struct together with a pointer to the buffer holding the contents.
+
 ## OPEN
 
 TODO Get system state (the only system-locking portion) and compose device file contents in a buffer; use like a matrix in the stack. Use the *private_data* member to point to the buffer.
