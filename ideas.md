@@ -175,13 +175,13 @@ Each entry holds:
 - Pointer to the corresponding instance data structure, meant to be NULL when the instance hasn't been created.
 - Receivers rw_semaphore.
 - Senders rw_semaphore.
-- Array of 32 atomic counters, one for each level, to count the readers.
 
 ## INSTANCE DATA STRUCTURE
 - Key.
 - Array of 32 level data structures.
 - Creator EUID.
 - Protection-enabled binary flag. Set by *tag_get* upon instance creation, enables permissions checks.
+- Array of 32 atomic counters, one for each level, to count the readers.
 
 ## LEVEL DATA STRUCTURE
 
@@ -217,7 +217,32 @@ Compute the size of the file as you produce it with subsequent calls to _sprintf
 
 ## OPEN
 
-TODO Get system state (the only system-locking portion) and compose device file contents in a buffer; use like a matrix in the stack. Use the *private_data* member to point to the buffer.
+Takes a snapshot of the state of the AOS-TAG service and saves it in text form in a buffer, which acts as the file.
+
+Returns 0 if all was done successfully and the "file" is ready, or -1 and *errno* is set to indicate the cause of the error.
+
+Keep in mind that all data that forms the status of the system is at most 32 bits long, so many unsigned ints and type casts should suffice.
+
+- Allocate a *line buffer* (80 chars) in the stack and *memset* it to 0.
+- Allocate a 32-entries unsigned int array in the stack, for readers presence counters.
+- Allocate two unsigned ints, for the key and the creator EUID.
+- *kzalloc* a *file buffer* which will hold the file's contents, size: *max_instances* * *32 (levels)* * *80 (chars)*.
+- Allocate a _char *_ in the stack that for now points to the base of the aforementioned buffer.
+- For each entry in the instance struct array:
+    - Trylock senders rw_sem as reader, *continue* if it fails (means that the instance is unavailable: it is being removed or created).
+    - If the instance struct pointer is not *NULL*:
+        - Get the key, the creator EUID and (atomically) the readers presence counters (in another *for* loop).
+        - Release senders rw_sem as reader.
+        - For each of the 32 levels:
+            - *memset* the line buffer to 0.
+            - *sprintf* status information in the line buffer: "TAG-key TAG-creator TAG-level Waiting-threads". Get the number of bytes written, it'll be useful in a moment.
+            - *memcpy* the contents of the line buffer in the file buffer. Add a newline character at the end.
+            - Advance the pointer accordingly.
+- Set the *private_data* member of the current *struct file* to the file buffer base.
+- Set all other required data, like *f_pos* and stuff.
+- Return.
+
+Again, be sure to release all locks and memory areas on any *if-else* sequence and exit.
 
 ## CLOSE
 
@@ -258,7 +283,7 @@ As requested, line-by-line status report. Located in /dev. Named */dev/aos_tag*.
 
 A generic userland thread becomes a writer/reader through these device files.
 What about IPC_PRIVATE? Which routines would need to be called?
-Develop the baseline version first, then make sure it is doable and discuss it with Quaglia to avoid conflicts with the specification. Could be a nice addition. Might require a different device driver, or an extension of that using the minor number.
+Develop the baseline version first, then make sure it is doable and discuss it with Quaglia to avoid conflicts with the specification. Could be a nice addition. Might require a different device driver, or an extension of that using the minor number. Or, it might be ioctl-based.
 
 # SYNCHRONIZATION
 
@@ -283,6 +308,8 @@ When a sender comes it locks its semaphore as reader, checks the pointer, eventu
 These are both real locks since potential writers are *removers* and *adders*, and both have a very short and deterministic critical section, and are deadlock-proof.
 
 Things are a little bit different when *adding* an instance: at first, the bitmask is atomically checked for a free spot, then the *adder thread* locks both rw_sems as a writer since being the pointer *NULL*, eventual readers/writers would almost immediately get out, then sets the pointer to that of a new instance struct.
+
+Also, threads that come from the VFS while doing an *open* must synchronize with *adders* and *removers* to take a snapshot of each instance before it fades away. This can be accomplished by locking the senders rw_sem and checking the instance pointer. Using the receivers one causes a false positive for removers that want to check if no reader is there, but that would only have to wait for the snapshot to be taken since these threads deterministically release this rw_sem shortly after.
 
 ## POSTING A MESSAGE ON A LEVEL
 
