@@ -10,6 +10,7 @@ Brainstorming table for whatever needs to be discussed before the coding starts.
 - The device file driver only has to lock and scan the array.
 - Permissions are implemented as simple checks of the current EUID against the creator's EUID when a thread does a tag_get. Such EUID is stored upon creation of the instance and checked each time it is reopened.
 - When loaded, this does a *try_module_get* on the *scth* module in the *init_module*, which is a dependency, releasing it with a *module_put* in *cleanup_module*.
+- Routines should be embedded into functions, to simplify code-writing, system calls definitions and device drivers coding (if we ever get to that).
 
 ## BINARY SEARCH TREE
 
@@ -232,6 +233,7 @@ Keep in mind that all data that forms the status of the system is at most 32 bit
     - Trylock senders rw_sem as reader, *continue* if it fails (means that the instance is unavailable: it is being removed or created).
     - If the instance struct pointer is not *NULL*:
         - Get the key, the creator EUID and (atomically) the readers presence counters (in another *for* loop).
+        - **STORE FENCE**
         - Release senders rw_sem as reader.
         - For each of the 32 levels:
             - *memset* the line buffer to 0.
@@ -252,7 +254,7 @@ Again, be sure to release all locks and memory areas on any *if-else* sequence a
 
 ## READ
 
-*copy_to_user* stuff from the buffer, with size checks, return values, EOF setting, f_pos advancing and shit.
+*copy_to_user* stuff from the file buffer, with size checks, return values, EOF setting, f_pos advancing and shit.
 
 ## LSEEK
 
@@ -321,9 +323,7 @@ The condition value is protected by an rw_sem and there's also an atomic presenc
 
 # TODO LIST
 
-- BST-Dictionary implementation.
-- Complete definition of all operations, both syscalls and device drivers.
-- Synchronization schemes for everything, also thinking about the device file read operation.
+- BST-Dictionary implementation (also check and merge guidelines below and above).
 - Signals, interrupts, preemption and the like checks against deadlocks and similar problems. Remember that wait queues functions return *-ERESTARTSYS* when a signal was delivered. Consider using local_locks to protect your (really) critical sections. See our little golden screenshot from our course materials to know how signals work (and remember: they're usermode shit, you just return -EINTR).
 - Check TSO compliance everywhere, add memory fences where needed.
 - Check against false cache sharing everywhere. Remember that one of our cache lines is 64-bytes long.
@@ -339,5 +339,4 @@ The condition value is protected by an rw_sem and there's also an atomic presenc
 and make nodes (structures) cache-aligned (in GCC: "struct ... {...} ... \__attribute__ ((aligned (L1_CACHE_BYTES)));").
 - MODULE_INFO stuff!
 - A more complete device driver?
-- Routines should be embedded into functions, to simplify code-writing, system calls definitions and device drivers coding (if we ever get to that).
 - Definitions of system call numbers for the user code given by *make* after module insertion using *awk* to read numbers from pseudofiles.
