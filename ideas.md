@@ -333,10 +333,7 @@ The condition value is protected by an rw_sem and there's also an atomic presenc
 # EXTRAS
 
 - Module parameters consistency check at insertion during *init_module*, especially for max values and sizes of stuff.
-- GCC error message if kernel version is older than 4.17.
 - Error checks and errno settings everywhere.
 - Splay trees as BSTs, using join-based alternative for deletion (to avoid splaying the predecessor to the top)
 and make nodes (structures) cache-aligned (in GCC: "struct ... {...} ... \__attribute__ ((aligned (L1_CACHE_BYTES)));").
-- MODULE_INFO stuff!
-- A more complete device driver?
 - Definitions of system call numbers for the user code given by *make* after module insertion using *awk* to read numbers from pseudofiles.
