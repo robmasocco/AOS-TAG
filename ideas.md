@@ -4,11 +4,11 @@ Brainstorming table for whatever needs to be discussed before the coding starts.
 
 ## KERNEL-SIDE ARCHITECTURE
 
-- Centralized architecture: there's only one binary search tree to lookup active instances, register new ones, or delete existing ones from. Indexed by keys, each entry contains the tag descriptor for that instance, if present. Max 256 nodes should be allowed. Only for shared instances.
+- Centralized architecture: there's only one binary search tree to lookup active instances, register new ones, or delete existing ones from. Indexed by keys, each entry contains the tag descriptor for that instance, if present. Only for shared instances.
 - The tag descriptor is an index in a kernel-level shared array of structs: pointers and two rw_semaphores.
-- In the array structures, first things checked by every syscall are the semaphores, then IMMEDIATELY the validity of the pointer.
-- The device file driver only has to lock and scan the array.
-- Permissions are implemented as simple checks of the current EUID against the creator's EUID when a thread does a tag_get. Such EUID is stored upon creation of the instance and checked each time it is reopened.
+- In the array structs, first things checked by every syscall are the semaphores, then IMMEDIATELY the validity of the pointer.
+- The device file driver only has to scan the array.
+- Permissions are implemented as simple checks of the current EUID against the creator's EUID when a thread calls a *send* or a *receive* on an active instance. Such EUID is stored upon creation of the instance and checked each time it is acted upon.
 - When loaded, this does a *try_module_get* on the *scth* module in the *init_module*, which is a dependency, releasing it with a *module_put* in *cleanup_module*.
 - Routines should be embedded into functions, to simplify code-writing, system calls definitions and device drivers coding (if we ever get to that).
 
@@ -18,15 +18,17 @@ Brainstorming table for whatever needs to be discussed before the coding starts.
 - Is indexed by int keys.
 - Each entry is an int "tag descriptor", index in the array.
 - Must be optimized for speed, "cache-like".
-- Must be protected from concurrent access, using an rw_semaphore at least.
+- Must be protected from concurrent access; see below.
+- Splay trees might be a good idea, using join-based alternative for deletion (to avoid splaying the predecessor to the top)
+    and make nodes (structures) cache-aligned (in GCC: "struct ... {...} ... \__attribute__ ((aligned (L1_CACHE_BYTES)));"). See [here](https://en.wikipedia.org/wiki/Splay_tree).
 
 # OPERATIONS DETAILS
 
 ## *int tag_get(int key, int command, int permission)*
 
-Opens a new instance of the service. You can open whatever instance you want but if permissions aren't ok for you then **all subsequent *receives* and *sends* will fail**.
+Opens a new instance of the service. You can open whatever instance you want but if permissions aren't ok for you then **all subsequent *receives* and *sends* will fail**. This behavior is intended since tag descriptors don't really mean much.
 
-This uses instance rw_sems as a writer to avoid race conditions with itself, while also checking for any activity on an instance.
+This uses instance rw_sems as a writer to avoid race conditions on an instance.
 
 Returns the tag descriptor (array index) of the new instance, or -1 and *errno* is set to indicate the cause of the error.
 
@@ -37,9 +39,9 @@ Returns the tag descriptor (array index) of the new instance, or -1 and *errno* 
     - Make a query in the tree for the specified key.
     - Release the tree rw_sem as a reader.
 - If *command* is *TAG_CREATE*:
-    - Acquire fd_set spinlock (allowing IRQs).
-    - Linearly scan the set to find a free entry in the array, then add it to the set and save the index (use *!FD_ISSET* and *FD_SET*).
-    - Release fd_set spinlock (as above).
+    - Acquire bitmask spinlock (allowing IRQs).
+    - Linearly scan the bitmask to find a free entry in the array, then add it to the set and save the index.
+    - Release bitmask spinlock (as above).
     - Allocate and accordingly initialize a new instance struct.
     - Acquire both rw_sems as writer.
     - Set the instance struct pointer to the new struct's address.
@@ -84,7 +86,7 @@ TSO bypasses are avoided by executing memory barriers embedded in spinlocks and 
 
 Even if new readers register themselves on the queue, those just awoken should prevent writers from running until they get the newest message.
 
-Ensure proper locks are released in each *if-else* to avoid deadlocks, and that the module is always released.
+Ensure proper locks are released in each *if-else* to avoid deadlocks, that incremented counters are always subsequently decremented, and that the module is always released.
 
 ## *int tag_send(int tag, int level, char \*buffer, size_t size)*
 
@@ -137,8 +139,10 @@ Returns 0 if the requested operation was completed successfully, or -1 and *errn
 - If *command* is *AWAKE_ALL*:
     - Call a write with a zero-length message on all levels, reusing the *send* routine.
 - If *command* is *REMOVE*:
-    - Trylock receivers rw_sem as writer, exit if at least a reader is there.
+    - Trylock receivers rw_sem as writer, exit if this fails since at least a reader is there.
     - Lock senders rw_sem as writer.
+    - Check instance pointer, eventually exit.
+    - Check permissions if required (flag), eventually exit.
     - Save instance struct pointer and set it to *NULL*.
     - Release senders rw_sem as writer.
     - Release receivers rw_sem as writer.
@@ -146,9 +150,9 @@ Returns 0 if the requested operation was completed successfully, or -1 and *errn
         - Acquire the tree rw_sem as writer.
         - Remove the entry from the tree.
         - Release the tree rw_sem as writer.
-    - Acquire fd_set spinlock (allowing IRQs).
-    - Remove the tag descriptor from the set (using *FD_CLR*).
-    - Release fd_set spinlock (as above).
+    - Acquire bitmask spinlock (allowing IRQs).
+    - Remove the tag descriptor from the bitmask.
+    - Release bitmask spinlock (as above).
     - Set creator EUID to zero (for security), then *kfree* instance struct.
 - *module_put*
 - Return.
@@ -167,9 +171,9 @@ This dictionary holds *key-tag descriptor* pairs of the instances that were **NO
 
 ## SHARED INSTANCES ARRAY
 
-Array of 256 structs with protected instance pointers, indexed by "tag descriptor".
+Array of structs with protected instance pointers, indexed by "tag descriptor".
 
-Goes with an *fd_set* that tells its current state, protected by a spinlock.
+Goes with a bitmask that tells its current state, protected by a spinlock.
 
 Each entry holds:
 
@@ -181,13 +185,13 @@ Each entry holds:
 - Key.
 - Array of 32 level data structures.
 - Creator EUID.
-- Protection-enabled binary flag. Set by *tag_get* upon instance creation, enables permissions checks.
+- Protection-enabled binary flag. Set by *tag_get* upon instance creation, enables permissions checks for subsequent operations.
 - Array of 32 atomic counters, one for each level, to count the readers.
 
 ## LEVEL DATA STRUCTURE
 
 - Wait queue head (which embeds a spinlock).
-- Pointer to a preallocated 1 page-buffer (using kmalloc).
+- Pointer to a preallocated message buffer (using *kmalloc*).
 - size_t size of the message currently stored.
 - Mutex to mutually exclude writers.
 - Single char/int used as condition value for the wait queue.
@@ -199,10 +203,8 @@ Each entry holds:
 Consider adding anything you might need to debug this module.
 
 - System call numbers (one pseudofile each) (read-only).
-- Max number of active instances (configurable at insertion).
-- Max message size (4 KB) (read-only).
-- Currently active instances (read-only).
-- Currently waiting threads on any level (read-only).
+- Max number of active instances (configurable at insertion but checked: must not drop below 256) (read-only).
+- Max message size (configurable at insertion but checked: must not drop below 4 KB) (read-only).
 
 # CHAR DEVICE DRIVER
 
@@ -210,11 +212,13 @@ Consider adding anything you might need to debug this module.
 
 Compute a fair exceeding estimate of the buffer size in *init_module*, using 80 chars lines * 32 levels * how many max instances the module is started with.
 
-Return *-ENOMEM* or similar on open if allocation fails or memory is insufficient.
+Return *-ENOMEM* or similar on *open* if allocation fails or memory is insufficient.
 
 Write stuff on lines, separating data with tabs.
 
-Compute the size of the file as you produce it with subsequent calls to _sprintf_.l, and store it in a struct together with a pointer to the buffer holding the contents.
+Compute the size of the file as you produce it with subsequent calls to _snprintf_.
+
+Operations marked as *nops* should return some kind of *errno* value to indicate that they're not implemented.
 
 ## OPEN
 
@@ -224,7 +228,7 @@ Returns 0 if all was done successfully and the "file" is ready, or -1 and *errno
 
 Keep in mind that all data that forms the status of the system is at most 32 bits long, so many unsigned ints and type casts should suffice.
 
-- Allocate a *line buffer* (80 chars) in the stack and *memset* it to 0.
+- Allocate a *line buffer* (80 chars) in the stack.
 - Allocate a 32-entries unsigned int array in the stack, for readers presence counters.
 - Allocate two unsigned ints, for the key and the creator EUID.
 - *kzalloc* a *file buffer* which will hold the file's contents, size: *max_instances* * *32 (levels)* * *80 (chars)*.
@@ -240,8 +244,9 @@ Keep in mind that all data that forms the status of the system is at most 32 bit
             - *snprintf* status information in the line buffer: "TAG-key TAG-creator TAG-level Waiting-threads", writing at most 80 chars. Get the number of bytes written, it'll be useful in a moment.
             - *memcpy* the contents of the line buffer in the file buffer. Add a newline character at the end.
             - Advance the pointer accordingly.
+    - Else: release senders rw_sem as reader.
 - Set the *private_data* member of the current *struct file* to the file buffer base.
-- Set all other required data, like *f_pos* and stuff.
+- Set all other required data, like *f_pos* and stuff. Is file size necessary?
 - Return.
 
 Again, be sure to release all locks and memory areas on any *if-else* sequence and exit.
@@ -284,12 +289,12 @@ As requested, line-by-line status report. Located in /dev. Named */dev/aos_tag*.
 ## I/O (?)
 
 A generic userland thread becomes a writer/reader through these device files.
-What about IPC_PRIVATE? Which routines would need to be called?
-Develop the baseline version first, then make sure it is doable and discuss it with Quaglia to avoid conflicts with the specification. Could be a nice addition. Might require a different device driver, or an extension of that using the minor number. Or, it might be ioctl-based.
+What about *IPC_PRIVATE*? Which routines would need to be called?
+Develop the baseline version first, then make sure it is doable and discuss it with Quaglia to avoid conflicts with the specification. Could be a nice addition. Might require a different device driver, or an extension of that using the minor number. Or, it might be *ioctl*-based.
 
 # SYNCHRONIZATION
 
-**At first, each operation should be protected with a *try_module_get/module_put* pair, the very first and last instructions of each system call, to ensure that the data structures we're about to access don't magically fade away whilst we're operating on them.**
+**At first, each operation should be protected with a *try_module_get/module_put* pair, the very first and last instructions of each system call, to ensure that the data structures we're about to access don't magically fade away whilst we're operating on them. Yes, there could still be race conditions, but you'd have to intentionally break the system to make them happen.**
 
 Don't use the *_interruptible* variants of rw_semaphores's APIs unless otherwise specified, so signals won't kick our butt.
 
@@ -299,31 +304,32 @@ There's just an rw_semaphore to acquire and release: as a reader when making a q
 
 ## ACCESS TO AN INSTANCE, REMOVAL, ADDITION
 
-There are 3 kinds of threads: *receivers*, *senders*, *removers*.
+There are 4 kinds of threads: *receivers*, *senders*, *removers*, *adders*.
 
 Keep in mind that senders and removers always return, never deadlock, so their critical section time is always constant. Each entry in the array holds two rw_semaphores and a pointer. Remember that *lock* and *unlock* are called *down* and *up* for semaphores. The first rw_sem is for receivers as readers, the second is for senders as readers, both are for removers as writers.
 
-When a remover comes, it trylocks the receivers's one as a writer, then **eventually** locks the senders's one as a writer, then flips the instance pointer to NULL, releases both locks and does its thing **afterwards** for the sake of speed. Note that the first trylock could mean either that the instance is really there but there's at least one writer in it, or that the instance isn't there, so nothing to do either way.
+When a remover comes, it trylocks the receivers's one as a writer, then **eventually** locks the senders's one as a writer, then flips the instance pointer to NULL, releases both locks and does its thing **afterwards** for the sake of speed. Note that the first trylock could mean either that the instance is really there but there's at least one reader in it, or that the instance isn't there because it is being removed or created, so nothing to do either way.
 
 When a receiver comes it locks its semaphore as reader, checks the pointer, eventually does its thing and unlocks its semaphore as reader.
 When a sender comes it locks its semaphore as reader, checks the pointer, eventually does its thing and unlocks the semaphore as reader.
-These are both real locks since potential writers are *removers* and *adders*, and both have a very short and deterministic critical section, and are deadlock-proof.
+These are both real locks since potential writers are *removers* and *adders*, both having a very short and deterministic critical section, and are deadlock-proof.
 
-Things are a little bit different when *adding* an instance: at first, the bitmask is atomically checked for a free spot, then the *adder thread* locks both rw_sems as a writer since being the pointer *NULL*, eventual readers/writers would almost immediately get out, then sets the pointer to that of a new instance struct.
+Things are a little bit different when *adding* an instance: at first, the bitmask is atomically checked for a free spot, then the *adder* thread locks both rw_sems as a writer since being the pointer *NULL*, eventual readers/writers would almost immediately get out, then sets the pointer to that of a new instance struct.
 
-Also, threads that come from the VFS while doing an *open* must synchronize with *adders* and *removers* to take a snapshot of each instance before it fades away. This can be accomplished by locking the senders rw_sem and checking the instance pointer. Using the receivers one causes a false positive for removers that want to check if no reader is there, but that would only have to wait for the snapshot to be taken since these threads deterministically release this rw_sem shortly after.
+Also, threads that come from the VFS while doing an *open* must synchronize with *adders* and *removers* to take a snapshot of each instance before it fades away. This can be accomplished by locking the senders rw_sem and checking the instance pointer. Using the receivers one causes a false positive for removers that want to check if no reader is there, this way they'd only have to wait for the snapshot to be taken since these threads deterministically release this rw_sem shortly after.
 
 ## POSTING A MESSAGE ON A LEVEL
 
-The writer posts a message in the level buffer (together with its size), updates the wakeup condition, then wakes readers up. Readers *memcpy* contents into an on-the-go-set array in the stack; then, they call *copy_to_user*. Buffers are preallocated for each level (a single page, compromise between complexity and resource usage). These sections run with preemption disabled for the sake of speed.
+The writer posts a message in the level buffer (together with its size), updates the wakeup condition, then wakes readers up. Readers *memcpy* contents into an on-the-go-set array in the stack; then, they call *copy_to_user*. Buffers are preallocated for each level (compromise between complexity and resource usage). Local copying sections run with preemption disabled for the sake of speed.
 
-The wakeup condition is a single value which is flipped each time a writer posts a message, and readers will always wait on the opposite value; thus, this works as a linearization point for the level data structure (evident if you see the pseudocode above).
+The wakeup condition is a single value which is flipped each time a writer posts a message, and readers will always wait on the opposite value; thus, this works as a linearization point for the level data structure state (evident if you see the pseudocode above).
 
-The condition value is protected by an rw_sem and there's also an atomic presence counter to distinguish between the moments when a message has been posted and has yet to be posted in a concurrent scenario for the readers, and make writers wait for all readers that got a condition value. This allows for some degree of concurrency, but heavily relies on having the wait queues APIs check the condition before going to sleep. Reading the current condition value at first, before atomically incrementing the presence counter, is very important to synch with the state, avoid deadlocks and be waited by the very next writer.
+The condition value is protected by an rw_sem and there's also an atomic presence counter to distinguish between the moments when a message has been posted and has yet to be posted in a concurrent scenario for the readers, and make writers wait for all readers that got a condition value. This allows for some degree of concurrency, but heavily relies on having the wait queues APIs check the condition before going to sleep. Reading the current condition value at first, before atomically incrementing the presence counter, is very important to sync with the state, avoid deadlocks and be waited by the very next writer.
 
 # TODO LIST
 
-- BST-Dictionary implementation (also check and merge guidelines below and above).
+- Bitmask API, maybe as macros (array of *longs* or struct with one large bit field?).
+- BST-Dictionary implementation.
 - Signals, interrupts, preemption and the like checks against deadlocks and similar problems. Remember that wait queues functions return *-ERESTARTSYS* when a signal was delivered. Consider using local_locks to protect your (really) critical sections. See our little golden screenshot from our course materials to know how signals work (and remember: they're usermode shit, you just return -EINTR).
 - Check TSO compliance everywhere, add memory fences where needed.
 - Check against false cache sharing everywhere. Remember that one of our cache lines is 64-bytes long.
@@ -334,6 +340,6 @@ The condition value is protected by an rw_sem and there's also an atomic presenc
 
 - Module parameters consistency check at insertion during *init_module*, especially for max values and sizes of stuff.
 - Error checks and errno settings everywhere.
-- Splay trees as BSTs, using join-based alternative for deletion (to avoid splaying the predecessor to the top)
-and make nodes (structures) cache-aligned (in GCC: "struct ... {...} ... \__attribute__ ((aligned (L1_CACHE_BYTES)));").
 - Definitions of system call numbers for the user code given by *make* after module insertion using *awk* to read numbers from pseudofiles.
+- *__randomize_layout* of some structs?
+
