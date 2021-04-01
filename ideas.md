@@ -86,6 +86,8 @@ TSO bypasses are avoided by executing memory barriers embedded in spinlocks and 
 
 Even if new readers register themselves on the queue, those just awoken should prevent writers from running until they get the newest message.
 
+Ensure to speed things up a bit if read message length is zero, so the thread just had to be awoken.
+
 Ensure proper locks are released in each *if-else* to avoid deadlocks, that incremented counters are always subsequently decremented, and that the module is always released.
 
 ## *int tag_send(int tag, int level, char \*buffer, size_t size)*
@@ -126,6 +128,8 @@ TSO bypasses are avoided by executing memory barriers and those embedded in spin
 
 Only one writer should be active at any given time.
 
+Ensure to speed things up a bit if read message length is zero, so the thread just had to be awoken.
+
 Ensure proper locks are released in each *if-else* to avoid deadlocks, and that the module is always released.
 
 ## *int tag_ctl(int tag, int command)*
@@ -137,7 +141,7 @@ Returns 0 if the requested operation was completed successfully, or -1 and *errn
 - *try_module_get*
 - Consistency checks on input arguments.
 - If *command* is *AWAKE_ALL*:
-    - Call a write with a zero-length message on all levels, reusing the *send* routine.
+    - Do more or less what is done in the *send* routine, but without setting a message or its length (leaving all to zero), and only trylocking the level writers mutex since if a writer is already there we got nothing to do.
 - If *command* is *REMOVE*:
     - Trylock receivers rw_sem as writer, exit if this fails since at least a reader is there.
     - Lock senders rw_sem as writer.
