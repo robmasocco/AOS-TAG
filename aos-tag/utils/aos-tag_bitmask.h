@@ -21,38 +21,115 @@
  * @date April 3, 2021
  */
 
+#ifdef __KERNEL__
+#include <linux/slab.h>
+#include <linux/spinlock.h>
+#else
+#include <stdlib.h>
+#endif
+
+/* Structure that holds a bitmask and metadata to quickly manage it. */
+typedef struct _tag_bitmask {
+    unsigned long *_mask;  /* Actual mask. Must be set manually outside. */
+    int _nr_tags;          /* Number of valid bits in the mask. */
+    int _mask_len;         /* Number of ulongs that compose the mask. */
+#ifdef __KERNEL__
+    spinlock_t _lock;      /* Lock to synchronize accesses to the mask. */
+#endif
+} tag_bitmask;
+
+/*
+ * Creates a tag bitmask capable of holding the specified number of elements.
+ *
+ * @param nr_tags Number of valid bits to hold.
+ * @return Address of the new bitmask.
+ */
+#ifndef __KERNEL__
+#define TAG_MASK_CREATE(nr_tags) ({                                          \
+    tag_bitmask *new_mask;                                                   \
+    new_mask = (tag_bitmask *)calloc(1, sizeof(tag_bitmask));                \
+    if (new_mask != NULL) {                                                  \
+        new_mask->_nr_tags = nr_tags;                                        \
+        new_mask->_mask_len = nr_tags / (sizeof(unsigned long) * 8);         \
+        if (nr_tags % (sizeof(unsigned long) * 8)) new_mask->_mask_len++;    \
+        new_mask->_mask = (unsigned long *)calloc(new_mask->_mask_len,       \
+                                                  sizeof(unsigned long));    \
+        if (new_mask->_mask == NULL) {                                       \
+            free(new_mask);                                                  \
+            new_mask = NULL;                                                 \
+        }                                                                    \
+    }                                                                        \
+    new_mask; })
+#else
+#define TAG_MASK_CREATE(nr_tags) ({                                          \
+    tag_bitmask *new_mask;                                                   \
+    new_mask = (tag_bitmask *)kzalloc(sizeof(tag_bitmask), GFP_KERNEL);      \
+    if (new_mask != NULL) {                                                  \
+        new_mask->_nr_tags = nr_tags;                                        \
+        new_mask->_mask_len = nr_tags / (sizeof(unsigned long) * 8);         \
+        if (nr_tags % (sizeof(unsigned long) * 8)) new_mask->_mask_len++;    \
+        new_mask->_mask = (unsigned long *)kzalloc(                          \
+            new_mask->_mask_len * sizeof(unsigned long),                     \
+            GFP_KERNEL);                                                     \
+        if (new_mask->_mask == NULL) {                                       \
+            kfree(new_mask);                                                 \
+            new_mask = NULL;                                                 \
+        }                                                                    \
+    }                                                                        \
+    new_mask; })
+#endif
+
+/*
+ * Removes a given tag bitmask, freeing memory.
+ *
+ * @param mask Tag mask to free.
+ */
+#ifndef __KERNEL__
+#define TAG_MASK_FREE(mask)                                                  \
+    do {                                                                     \
+        free(mask->_mask);                                                   \
+        free(mask);                                                          \
+    } while (0)
+#else
+#define TAG_MASK_FREE(mask)                                                  \
+    do {                                                                     \
+        kfree(mask->_mask);                                                  \
+        kfree(mask);                                                         \
+    } while (0)
+#endif
+
 /*
  * Sets a specific bit in the bitmask.
  * NOTE: No validity check on the index is performed!
  *
- * @param tag_mask Address of the ulong array that forms the bitmask.
+ * @param tag_mask Address of the bitmask.
  * @param tag_desc Index of the bit to set.
  */
 #define TAG_SET(tag_mask, tag_desc)                                          \
     do {                                                                     \
         int ulong_indx, bit_indx;                                            \
         ulong_indx = tag_desc / (sizeof(unsigned long) * 8);                 \
-        unsigned long tag_ulong = tag_mask[ulong_indx];                      \
+        unsigned long tag_ulong = (tag_mask->_mask)[ulong_indx];             \
         bit_indx = tag_desc - (ulong_indx * (sizeof(unsigned long) * 8));    \
         tag_ulong |= (0x1UL << bit_indx);                                    \
-        tag_mask[ulong_indx] = tag_ulong;                                    \
+        (tag_mask->_mask)[ulong_indx] = tag_ulong;                           \
     } while (0)
 
 /*
  * Clears a specific bit in the bitmask.
  * NOTE: No validity check on the index is performed!
  *
- * @param tag_mask Address of the ulong array that forms the bitmask.
+ * @param tag_mask Address of the bitmask.
  * @param tag_desc Index of the bit to set.
  */
 #define TAG_CLR(tag_mask, tag_desc)                                          \
     do {                                                                     \
         int ulong_indx, bit_indx;                                            \
         ulong_indx = tag_desc / (sizeof(unsigned long) * 8);                 \
-        unsigned long tag_ulong = tag_mask[ulong_indx];                      \
+        unsigned long tag_ulong = (tag_mask->_mask)[ulong_indx];             \
         bit_indx = tag_desc - (ulong_indx * (sizeof(unsigned long) * 8));    \
         tag_ulong &= (~0x0UL) ^ (0x1UL << bit_indx);                         \
-        tag_mask[ulong_indx] = tag_ulong;                                    \
+        (tag_mask->_mask)[ulong_indx] = tag_ulong;                           \
     } while (0)
 
 /*
@@ -61,17 +138,17 @@
  * NOTE: Validity check is performed here, since the mask length could
  *       exceed the number of valid positions in the array.
  *
- * @param tag_mask Address of the ulong array that forms the bitmask.
+ * @param tag_mask Address of the bitmask.
  * @param nr_tags Number of valid bits in the bitmask.
  * @return Index of the newly set bit, or -1 if the mask was full.
  */
-#define TAG_NEXT(tag_mask, nr_tags) ({                                       \
-    int i, ret = -1, mask_len;                                               \
-    mask_len = nr_tags / (sizeof(unsigned long) * 8);                        \
-    if (nr_tags % (sizeof(unsigned long) * 8)) mask_len++;                   \
+#define TAG_NEXT(tag_mask) ({                                                \
+    int i, ret = -1, mask_len, nr_tags;                                      \
+    mask_len = tag_mask->_mask_len;                                          \
+    nr_tags = tag_mask->_nr_tags;                                            \
     for (i = 0; i < mask_len; i++) {                                         \
         unsigned long curr_ulong;                                            \
-        curr_ulong = tag_mask[i];                                            \
+        curr_ulong = (tag_mask->_mask)[i];                                   \
         int j;                                                               \
         for (j = 0; j < (sizeof(unsigned long) * 8); j++) {                  \
             if ((j + (i * sizeof(unsigned long) * 8)) >= nr_tags) break;     \
@@ -84,4 +161,3 @@
         if (ret != -1) break;                                                \
     }                                                                        \
     ret; })
-
