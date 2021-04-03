@@ -332,9 +332,8 @@ The condition value is protected by an rw_sem and there's also an atomic presenc
 
 # TODO LIST
 
-- Bitmask API, maybe as macros (array of *longs* or struct with one large bit field?).
 - BST-Dictionary implementation.
-- Signals, interrupts, preemption and the like checks against deadlocks and similar problems. Remember that wait queues functions return *-ERESTARTSYS* when a signal was delivered. Consider using local_locks to protect your (really) critical sections. See our little golden screenshot from our course materials to know how signals work (and remember: they're usermode shit, you just return -EINTR).
+- Signals, interrupts, preemption and the like checks against deadlocks and similar problems. Remember that wait queues functions return *-ERESTARTSYS* when a signal was delivered. See our little golden screenshot from our course materials to know how signals work (and remember: they're usermode shit, you just return -EINTR).
 - Check TSO compliance everywhere, add memory fences where needed.
 - Check against false cache sharing everywhere. Remember that one of our cache lines is 64-bytes long.
 - Anything still marked as TODO here.
