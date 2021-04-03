@@ -6,7 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "aos-tag_bitmask.h"
+#include "../aos-tag/utils/aos-tag_bitmask.h"
 
 #define MAX_INST 300  /* Simulates default max number of instances. */
 
