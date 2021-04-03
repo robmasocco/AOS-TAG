@@ -20,6 +20,10 @@
  *
  * @date April 3, 2021
  */
+/* 
+ + NOTE: Usermode versions of these macros are intended for testing
+ *       purposes only.
+ */
 
 #ifdef __KERNEL__
 #include <linux/slab.h>
@@ -65,6 +69,7 @@ typedef struct _tag_bitmask {
     tag_bitmask *new_mask;                                                   \
     new_mask = (tag_bitmask *)kzalloc(sizeof(tag_bitmask), GFP_KERNEL);      \
     if (new_mask != NULL) {                                                  \
+        spin_lock_init(&(new_mask->_lock));                                  \
         new_mask->_nr_tags = nr_tags;                                        \
         new_mask->_mask_len = nr_tags / (sizeof(unsigned long) * 8);         \
         if (nr_tags % (sizeof(unsigned long) * 8)) new_mask->_mask_len++;    \
@@ -101,6 +106,8 @@ typedef struct _tag_bitmask {
 /*
  * Sets a specific bit in the bitmask.
  * NOTE: No validity check on the index is performed!
+ * WARNING: This routine does not acquire the mask lock, you'll have to do it
+ *          manually prior to the call.
  *
  * @param tag_mask Address of the bitmask.
  * @param tag_desc Index of the bit to set.
@@ -109,8 +116,8 @@ typedef struct _tag_bitmask {
     do {                                                                     \
         int ulong_indx, bit_indx;                                            \
         ulong_indx = tag_desc / (sizeof(unsigned long) * 8);                 \
-        unsigned long tag_ulong = (tag_mask->_mask)[ulong_indx];             \
         bit_indx = tag_desc - (ulong_indx * (sizeof(unsigned long) * 8));    \
+        unsigned long tag_ulong = (tag_mask->_mask)[ulong_indx];             \
         tag_ulong |= (0x1UL << bit_indx);                                    \
         (tag_mask->_mask)[ulong_indx] = tag_ulong;                           \
     } while (0)
@@ -118,30 +125,46 @@ typedef struct _tag_bitmask {
 /*
  * Clears a specific bit in the bitmask.
  * NOTE: No validity check on the index is performed!
+ * WARNING: This routine acquires the mask lock.
  *
  * @param tag_mask Address of the bitmask.
  * @param tag_desc Index of the bit to set.
  */
+#ifndef __KERNEL__
 #define TAG_CLR(tag_mask, tag_desc)                                          \
     do {                                                                     \
         int ulong_indx, bit_indx;                                            \
         ulong_indx = tag_desc / (sizeof(unsigned long) * 8);                 \
-        unsigned long tag_ulong = (tag_mask->_mask)[ulong_indx];             \
         bit_indx = tag_desc - (ulong_indx * (sizeof(unsigned long) * 8));    \
+        unsigned long tag_ulong = (tag_mask->_mask)[ulong_indx];             \
         tag_ulong &= (~0x0UL) ^ (0x1UL << bit_indx);                         \
         (tag_mask->_mask)[ulong_indx] = tag_ulong;                           \
     } while (0)
+#else
+#define TAG_CLR(tag_mask, tag_desc)                                          \
+    do {                                                                     \
+        int ulong_indx, bit_indx;                                            \
+        ulong_indx = tag_desc / (sizeof(unsigned long) * 8);                 \
+        bit_indx = tag_desc - (ulong_indx * (sizeof(unsigned long) * 8));    \
+        spin_lock(&(tag_mask->_lock));                                       \
+        unsigned long tag_ulong = (tag_mask->_mask)[ulong_indx];             \
+        tag_ulong &= (~0x0UL) ^ (0x1UL << bit_indx);                         \
+        (tag_mask->_mask)[ulong_indx] = tag_ulong;                           \
+        spin_unlock(&(tag_mask->_lock));                                     \
+    } while (0)
+#endif
 
 /*
  * Returns the index of the first zero bit in the bitmask, or -1.
  * For the sake of speed, the bit is also set to 1.
  * NOTE: Validity check is performed here, since the mask length could
  *       exceed the number of valid positions in the array.
+ * WARNING: This routine acquires the mask lock.
  *
  * @param tag_mask Address of the bitmask.
- * @param nr_tags Number of valid bits in the bitmask.
  * @return Index of the newly set bit, or -1 if the mask was full.
  */
+#ifndef __KERNEL__
 #define TAG_NEXT(tag_mask) ({                                                \
     int i, ret = -1, mask_len, nr_tags;                                      \
     mask_len = tag_mask->_mask_len;                                          \
@@ -161,3 +184,26 @@ typedef struct _tag_bitmask {
         if (ret != -1) break;                                                \
     }                                                                        \
     ret; })
+#else
+#define TAG_NEXT(tag_mask) ({                                                \
+    int i, ret = -1, mask_len, nr_tags;                                      \
+    spin_lock(&(tag_mask->_lock));                                           \
+    mask_len = tag_mask->_mask_len;                                          \
+    nr_tags = tag_mask->_nr_tags;                                            \
+    for (i = 0; i < mask_len; i++) {                                         \
+        unsigned long curr_ulong;                                            \
+        curr_ulong = (tag_mask->_mask)[i];                                   \
+        int j;                                                               \
+        for (j = 0; j < (sizeof(unsigned long) * 8); j++) {                  \
+            if ((j + (i * sizeof(unsigned long) * 8)) >= nr_tags) break;     \
+            if (!(curr_ulong & (0x1UL << j))) {                              \
+                ret = j + (i * sizeof(unsigned long) * 8);                   \
+                TAG_SET(tag_mask, ret);                                      \
+                break;                                                       \
+            }                                                                \
+        }                                                                    \
+        if (ret != -1) break;                                                \
+    }                                                                        \
+    spin_unlock(&(tag_mask->_lock));                                         \
+    ret; })
+#endif
