@@ -39,6 +39,9 @@ Returns the tag descriptor (array index) of the new instance, or -1 and *errno* 
     - Make a query in the tree for the specified key.
     - Release the tree rw_sem as a reader.
 - If *command* is *TAG_CREATE*:
+    - If key is not *IPC_PRIVATE*:
+        - Acquire the tree rw_sem as writer.
+        - Look for the key in the tree, exit if found. Note that doing things like this is the only way to prevent adding multiple instances of the same key.
     - Acquire bitmask spinlock (allowing IRQs).
     - Linearly scan the bitmask to find a free entry in the array, then add it to the set and save the index.
     - Release bitmask spinlock (as above).
@@ -47,7 +50,6 @@ Returns the tag descriptor (array index) of the new instance, or -1 and *errno* 
     - Set the instance struct pointer to the new struct's address.
     - Release both rw_sems as writer.
     - If key is not *IPC_PRIVATE*:
-        - Acquire the tree rw_sem as a writer.
         - Add a new entry to the tree.
         - Release the tree rw_sem as a writer.
 - *module_put*
