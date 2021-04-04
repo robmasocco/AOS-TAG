@@ -167,7 +167,7 @@ Ensure proper locks are released in each *if-else* to avoid deadlocks, and that 
 
 ## BST-DICTIONARY
 
-This dictionary holds *key-tag descriptor* pairs of the instances that were **NOT** created as *IPC_PRIVATE*, thus meant to be shared. Goes with an rw_semaphore to synchronize accesses (see below). Each node holds:
+This dictionary holds *key-tag descriptor* pairs of the instances that were **NOT** created as *IPC_PRIVATE*, thus meant to be shared. Goes with an rw_semaphore to synchronize accesses (see below), which is embedded into the structure and automatically used as part of the normal operations, so completely transparent to the code that uses the BST. Each node holds:
 
 - int key, the dictionary key.
 - int tag descriptor, index in the shared instances array.
@@ -304,7 +304,7 @@ Don't use the *_interruptible* variants of rw_semaphores's APIs unless otherwise
 
 ## ACCESS TO THE BST-DICTIONARY
 
-There's just an rw_semaphore to acquire and release: as a reader when making a query, as a writer when cutting an instance out or adding one.
+There's just an rw_semaphore to acquire and release: as a reader when making a query, as a writer when cutting an instance out or adding one. It is embedded into the data structure and its usage is part of the normal operations.
 
 ## ACCESS TO AN INSTANCE, REMOVAL, ADDITION
 
