@@ -46,7 +46,7 @@ void _spli_left_rotation(SplayIntNode *node);
 SplayIntNode *_spli_splay(SplayIntNode *node);
 SplayIntNode *_spli_join(SplayIntNode *left_root, SplayIntNode *right_root);
 
-// USER FUNCTIONS //
+// LIBRARY FUNCTIONS //
 /*
  * Creates a new Splay Tree.
  *
