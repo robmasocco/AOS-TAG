@@ -346,4 +346,6 @@ The condition value is protected by an rw_sem and there's also an atomic presenc
 - Error checks and errno settings everywhere.
 - Definitions of system call numbers for the user code given by *make* after module insertion using *awk* to read numbers from pseudofiles.
 - *__randomize_layout* of some structs?
+- Docs in here:
+-- A README for SCTH.
 
