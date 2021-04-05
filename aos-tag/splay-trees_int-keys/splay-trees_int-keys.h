@@ -1,3 +1,18 @@
+/* 
+ * This is free software.
+ * You can redistribute it and/or modify this file under the
+ * terms of the GNU General Public License as published by the Free Software
+ * Foundation; either version 3 of the License, or (at your option) any later
+ * version.
+ * 
+ * This file is distributed in the hope that it will be useful, but WITHOUT ANY
+ * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR
+ * A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+ * 
+ * You should have received a copy of the GNU General Public License along with
+ * this file; if not, write to the Free Software Foundation, Inc.,
+ * 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA.
+ */
 /*
  * @brief Splay Tree data structure library header.
  *
@@ -10,13 +25,13 @@
  * structure. See the source file for brief descriptions of what each function
  * does. Note that functions which names start with "_" are meant for internal
  * use only, and only those without it should be used by the actual programmer.
- * Many functions require dynamic memory allocation in the heap, and many
- * exposed methods require pointers or return some which refer to the heap: see
+ * Many functions require dynamic memory allocation, and many
+ * exposed methods require pointers or return some: see
  * the source file to understand what needs to be freed after use.
  */
-/* 
- * This code is released under the MIT license.
- * See the attached LICENSE file.
+/*
+ * This code is a kernel-side rework of my repository splay-trees_c.
+ * It lacks many unnecessary things and does others differently.
  */
 
 #ifndef _SPLAYTREES_INTEGERKEYS_H
@@ -26,7 +41,7 @@ typedef unsigned long int ulong;
 
 /* 
  * These options can be OR'd in a call to the delete functions to specify
- * if also the keys and/or the data in the nodes must be freed in the heap.
+ * if also the keys and/or the data in the nodes must be freed.
  * If nothing is specified, only the nodes are freed.
  */
 #define DELETE_FREE_DATA 0x1
@@ -37,30 +52,7 @@ typedef unsigned long int ulong;
  * Only one at a time is allowed.
  */
 #define SEARCH_DATA 0x4
-#define SEARCH_KEYS 0x8
 #define SEARCH_NODES 0x10
-
-/*
- * This option can be used to perform the splaying operation on the target node
- * during a search. For performance purposes, this behaviour is configurable,
- * since it can prevent concurrent accesses in multithreaded scenarios.
- * If set, the amortized analysis result applies and the amortized time for all
- * types of operations seen in a sequence is logarithmic in the max number of
- * nodes the structure reaches in a sequence, but searches must be performed
- * atomically (and locking of the structure is not dealt with here).
- * If not set, searches have a linear worst-case execution time, but can be
- * perfomed concurrently by multiple threads.
- * Can be OR'd with the previous ones.
- */
-#define SEARCH_SPLAY 0x2
-
-/*
- * These options can be used to specify the desired kind of depth-first search.
- * Only one at a time is allowed.
- */
-#define DFS_PRE_ORDER 0x20
-#define DFS_IN_ORDER 0x40
-#define DFS_POST_ORDER 0x80
 
 /*
  * These options can be used to specify the desired kind of breadth-first
@@ -107,7 +99,6 @@ int delete_splay_int_tree(SplayIntTree *tree, int opts);
 void *splay_int_search(SplayIntTree *tree, int key, int opts);
 ulong splay_int_insert(SplayIntTree *tree, int new_key, void *new_data);
 int splay_int_delete(SplayIntTree *tree, int key, int opts);
-void **splay_int_dfs(SplayIntTree *tree, int type, int opts);
 void **splay_int_bfs(SplayIntTree *tree, int type, int opts);
 
 #endif

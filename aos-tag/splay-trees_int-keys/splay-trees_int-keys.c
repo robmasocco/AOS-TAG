@@ -1,3 +1,18 @@
+/* 
+ * This is free software.
+ * You can redistribute it and/or modify this file under the
+ * terms of the GNU General Public License as published by the Free Software
+ * Foundation; either version 3 of the License, or (at your option) any later
+ * version.
+ * 
+ * This file is distributed in the hope that it will be useful, but WITHOUT ANY
+ * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR
+ * A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+ * 
+ * You should have received a copy of the GNU General Public License along with
+ * this file; if not, write to the Free Software Foundation, Inc.,
+ * 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA.
+ */
 /*
  * @brief Splay Tree data structure library source code.
  *
@@ -5,14 +20,14 @@
  *
  * @date April 4, 2021
  */
-/* 
- * This code is released under the MIT license.
- * See the attached LICENSE file.
+/*
+ * This code is a kernel-side rework of my repository splay-trees_c.
+ * It lacks many unnecessary things and does others differently.
  */
 
-#include <stdlib.h>
+#include <linux/slab.h>
 #include <limits.h>
-#include "splay-trees_int-keys.h"
+#include "splay-trees_int-keys/splay-trees_int-keys.h"
 
 /* Internal library subroutines declarations. */
 SplayIntNode *_spli_create_node(int new_key, void *new_data);
@@ -28,18 +43,16 @@ void _spli_right_rotation(SplayIntNode *node);
 void _spli_left_rotation(SplayIntNode *node);
 SplayIntNode *_spli_splay(SplayIntNode *node);
 SplayIntNode *_spli_join(SplayIntNode *left_root, SplayIntNode *right_root);
-void _spli_inodfs(SplayIntNode *root_node, void ***int_ptr, int int_opt);
-void _spli_preodfs(SplayIntNode *root_node, void ***int_ptr, int int_opt);
-void _spli_postodfs(SplayIntNode *root_node, void ***int_ptr, int int_opt);
 
 // USER FUNCTIONS //
 /*
- * Creates a new AVL Tree in the heap.
+ * Creates a new Splay Tree.
  *
  * @return Pointer to the newly created tree, NULL if allocation failed.
  */
 SplayIntTree *create_splay_int_tree(void) {
-    SplayIntTree *new_tree = (SplayIntTree *)malloc(sizeof(SplayIntTree));
+    SplayIntTree *new_tree;
+    new_tree = (SplayIntTree *)kmalloc(sizeof(SplayIntTree), GFP_KERNEL);
     if (new_tree == NULL) return NULL;
     new_tree->_root = NULL;
     new_tree->nodes_count = 0;
@@ -48,7 +61,7 @@ SplayIntTree *create_splay_int_tree(void) {
 }
 
 /* 
- * Frees a given AVL Tree from the heap. Using options defined in the header,
+ * Frees a given Splay Tree. Using options defined in the header,
  * it's possible to specify whether also data has to be freed or not.
  *
  * @param tree Pointer to the tree to free.
@@ -60,20 +73,21 @@ int delete_splay_int_tree(SplayIntTree *tree, int opts) {
     if ((tree == NULL) || (opts < 0)) return -1;
     // If the tree is empty free it directly.
     if (tree->_root == NULL) {
-        free(tree);
+        kfree(tree);
         return 0;
     }
     // Do a BFS to get all the nodes (less taxing on memory than a DFS).
-    SplayIntNode **nodes =
-        (SplayIntNode **)splay_int_bfs(tree, BFS_LEFT_FIRST, SEARCH_NODES);
+    SplayIntNode **nodes;
+    nodes = (SplayIntNode **)splay_int_bfs(tree, BFS_LEFT_FIRST, SEARCH_NODES);
     // Free the nodes and eventually their data.
-    for (unsigned long int i = 0; i < tree->nodes_count; i++) {
-        if (opts & DELETE_FREE_DATA) free((*(nodes[i]))._data);
+    unsigned long int i;
+    for (i = 0; i < tree->nodes_count; i++) {
+        if (opts & DELETE_FREE_DATA) kfree((*(nodes[i]))._data);
         _spli_delete_node(nodes[i]);
     }
     // Free the nodes array and the tree, and that's it!
-    free(nodes);
-    free(tree);
+    kfree(nodes);
+    kfree(tree);
     return 0;
 }
 
@@ -87,12 +101,9 @@ int delete_splay_int_tree(SplayIntTree *tree, int opts) {
  */
 void *splay_int_search(SplayIntTree *tree, int key, int opts) {
     if ((opts <= 0) || (tree == NULL)) return NULL;  // Sanity check.
-    SplayIntNode *searched_node = _spli_search_node(tree, key);
+    SplayIntNode *searched_node;
+    searched_node = _spli_search_node(tree, key);
     if (searched_node == NULL) return NULL;
-    // Splay the searched node.
-    if (opts & SEARCH_SPLAY)
-        while (tree->_root != searched_node)
-            searched_node = _spli_splay(searched_node);
     if (opts & SEARCH_DATA) return searched_node->_data;
     if (opts & SEARCH_NODES) return (void *)searched_node;
     return NULL;
@@ -109,18 +120,20 @@ void *splay_int_search(SplayIntTree *tree, int key, int opts) {
 int splay_int_delete(SplayIntTree *tree, int key, int opts) {
     // Sanity check on input arguments.
     if ((opts < 0) || (tree == NULL)) return 0;
-    SplayIntNode *to_delete = _spli_search_node(tree, key);
+    SplayIntNode *to_delete;
+    to_delete = _spli_search_node(tree, key);
     if (to_delete != NULL) {
         // Splay the target node. Follow the content swaps!
         while (tree->_root != to_delete)
             to_delete = _spli_splay(to_delete);
         // Remove the new root from the tree, then join the two subtrees.
-        SplayIntNode *left_sub = _spli_cut_left_subtree(to_delete);
-        SplayIntNode *right_sub = _spli_cut_right_subtree(to_delete);
+        SplayIntNode *left_sub, *right_sub;
+        left_sub = _spli_cut_left_subtree(to_delete);
+        right_sub = _spli_cut_right_subtree(to_delete);
         tree->_root = _spli_join(left_sub, right_sub);
         // Apply eventual options to free keys and data, then free the node.
-        if (opts & DELETE_FREE_DATA) free(to_delete->_data);
-        free(to_delete);
+        if (opts & DELETE_FREE_DATA) kfree(to_delete->_data);
+        kfree(to_delete);
         tree->nodes_count--;
         return 1;  // Found and deleted.
     }
@@ -138,7 +151,8 @@ int splay_int_delete(SplayIntTree *tree, int key, int opts) {
 ulong splay_int_insert(SplayIntTree *tree, int new_key, void *new_data) {
     if (tree == NULL) return 0;  // Sanity check.
     if (tree->nodes_count == tree->max_nodes) return 0;  // The tree is full.
-    SplayIntNode *new_node = _spli_create_node(new_key, new_data);
+    SplayIntNode *new_node;
+    new_node = _spli_create_node(new_key, new_data);
     if (tree->_root == NULL) {
         // The tree is empty.
         tree->_root = new_node;
@@ -167,56 +181,6 @@ ulong splay_int_insert(SplayIntTree *tree, int new_key, void *new_data) {
     return tree->nodes_count;  // Return the result of the insertion.
 }
 
-/* 
- * Performs a depth-first search of the tree, the type of which can be
- * specified using the options defined in the header.
- * Depending on the option specified, returns an array of:
- * - Pointers to the nodes.
- * - Keys.
- * - Data.
- * See the header for the definitions of such options.
- * Remember to free the returned array afterwards!
- *
- * @param tree Pointer to the tree to operate on.
- * @param type Type of DFS to perform (see header).
- * @param opts Type of data to return (see header).
- * @return Pointer to an array with the result of the search correctly ordered.
- */
-void **splay_int_dfs(SplayIntTree *tree, int type, int opts) {
-    // Sanity check for the input arguments.
-    if ((type <= 0) || (opts <= 0)) return NULL;
-    if ((tree == NULL) || (tree->_root == NULL)) return NULL;
-    // Allocate memory according to options.
-    void **dfs_res;
-    int int_opt;
-    if (opts & SEARCH_DATA) {
-        int_opt = SEARCH_DATA;
-        dfs_res = calloc(tree->nodes_count, sizeof(void *));
-    } else if (opts & SEARCH_KEYS) {
-        int_opt = SEARCH_KEYS;
-        dfs_res = calloc(tree->nodes_count, sizeof(int));
-    } else if (opts & SEARCH_NODES) {
-        int_opt = SEARCH_NODES;
-        dfs_res = calloc(tree->nodes_count, sizeof(SplayIntNode *));
-    } else return NULL;  // Invalid option.
-    if (dfs_res == NULL) return NULL;  // calloc failed.
-    // Launch the requested DFS according to type.
-    void **int_ptr = dfs_res;
-    if (type & DFS_PRE_ORDER) {
-        _spli_preodfs(tree->_root, &int_ptr, int_opt);
-    } else if (type & DFS_IN_ORDER) {
-        _spli_inodfs(tree->_root, &int_ptr, int_opt);
-    } else if (type & DFS_POST_ORDER) {
-        _spli_postodfs(tree->_root, &int_ptr, int_opt);
-    } else {
-        // Invalid type.
-        free(dfs_res);
-        return NULL;
-    }
-    // The array is now filled with the requested data.
-    return dfs_res;
-}
-
 /*
  * Performs a breadth-first search of the tree, the type of which can be
  * specified using the options defined in the header (left or right son
@@ -227,6 +191,8 @@ void **splay_int_dfs(SplayIntTree *tree, int type, int opts) {
  * - Data.
  * See the header for the definitions of such options.
  * Remember to free the returned array afterwards!
+ * NOTE: In this work, we'll use this function only to delete the whole tree,
+ *       so some stuff from the original implementation is missing.
  * 
  * @param tree Pointer to the tree to operate on.
  * @param type Type of BFS to perform (see header).
@@ -235,40 +201,28 @@ void **splay_int_dfs(SplayIntTree *tree, int type, int opts) {
  */
 void **splay_int_bfs(SplayIntTree *tree, int type, int opts) {
     // Sanity check on input arguments.
-    if ((tree == NULL) || (tree->_root == NULL) ||
-        (type <= 0) || (opts <= 0) ||
-        !((type & BFS_LEFT_FIRST) || (type & BFS_RIGHT_FIRST)) ||
-        !((opts & SEARCH_KEYS) || (opts & SEARCH_DATA) ||
-        (opts & SEARCH_NODES))) return NULL;
-    // Allocate memory in the heap.
+    if ((tree == NULL) || (tree->_root == NULL)) return NULL;
+    // Allocate memory.
     void **bfs_res = NULL;
     void **int_ptr;
-    int *key_ptr;  // Used only if keys are searched.
     if (opts & SEARCH_DATA) {
-        bfs_res = calloc(tree->nodes_count, sizeof(void *));
-    } else if (opts & SEARCH_KEYS) {
-        bfs_res = calloc(tree->nodes_count, sizeof(SplayIntNode *));
-        key_ptr = (int *)bfs_res;
+        bfs_res = kzalloc((tree->nodes_count) * sizeof(void *), GFP_KERNEL);
     } else if (opts & SEARCH_NODES) {
-        bfs_res = calloc(tree->nodes_count, sizeof(SplayIntNode *));
+        bfs_res = kzalloc((tree->nodes_count) * sizeof(SplayIntNode *),
+                           GFP_KERNEL);
     } else return NULL;  // Invalid option.
-    if (bfs_res == NULL) return NULL;  // Calloc failed.
+    if (bfs_res == NULL) return NULL;
     int_ptr = bfs_res + 1;
     *bfs_res = (void *)(tree->_root);
     SplayIntNode *curr;
     // Start the visit, using the same array to return as a temporary queue
     // for the nodes.
-    for (unsigned long int i = 0; i < tree->nodes_count; i++) {
+    unsigned long int i;
+    for (i = 0; i < tree->nodes_count; i++) {
         curr = (SplayIntNode *)bfs_res[i];
         // Visit the current node.
-        if (opts & SEARCH_DATA) {
-            bfs_res[i] = curr->_data;
-        } else if (opts & SEARCH_KEYS) {
-            *key_ptr = curr->_key;
-            key_ptr++;
-        } else if (opts & SEARCH_NODES) {
-            bfs_res[i] = curr;
-        }
+        if (opts & SEARCH_DATA) bfs_res[i] = curr->_data;
+        if (opts & SEARCH_NODES) bfs_res[i] = curr;
         // Eventually add the sons to the array, to be visited afterwards.
         if (type & BFS_LEFT_FIRST) {
             if (curr->_left_son != NULL) {
@@ -279,7 +233,8 @@ void **splay_int_bfs(SplayIntTree *tree, int type, int opts) {
                 *int_ptr = (void *)(curr->_right_son);
                 int_ptr++;
             }
-        } else if (type & BFS_RIGHT_FIRST) {
+        }
+        if (type & BFS_RIGHT_FIRST) {
             if (curr->_right_son != NULL) {
                 *int_ptr = (void *)(curr->_right_son);
                 int_ptr++;
@@ -290,30 +245,20 @@ void **splay_int_bfs(SplayIntTree *tree, int type, int opts) {
             }
         }
     }
-    if (opts & SEARCH_KEYS) {
-        // If keys were searched, part of the array (half of it on x86_64)
-        // is totally unneeded, so we can release it.
-        // reallocarray is used instead of realloc to account for possible size
-        // computation overflows (see man).
-        if ((bfs_res = reallocarray(bfs_res, (size_t)(tree->nodes_count),
-                sizeof(int))) == NULL) {
-            free(bfs_res);
-            return NULL;
-        }
-    }
     return bfs_res;
 }
 
 // INTERNAL LIBRARY SUBROUTINES //
 /*
- * Creates a new node in the heap. Requires an integer key and some data.
+ * Creates a new node. Requires an integer key and some data.
  *
  * @param new_key Key to add.
  * @param new_data Data to add.
  * @return Pointer to a new node, or NULL if allocation failed.
  */
 SplayIntNode *_spli_create_node(int new_key, void *new_data) {
-    SplayIntNode *new_node = (SplayIntNode *)malloc(sizeof(SplayIntNode));
+    SplayIntNode *new_node;
+    new_node = (SplayIntNode *)kmalloc(sizeof(SplayIntNode), GFP_KERNEL);
     if (new_node == NULL) return NULL;
     new_node->_father = NULL;
     new_node->_left_son = NULL;
@@ -329,7 +274,7 @@ SplayIntNode *_spli_create_node(int new_key, void *new_data) {
  * @param node Node to release.
  */
 void _spli_delete_node(SplayIntNode *node) {
-    free(node);
+    kfree(node);
 }
 
 /*
@@ -445,10 +390,11 @@ void _spli_right_rotation(SplayIntNode *node) {
     // Swap the node and its son's contents to make it climb.
     _spli_swap_info(node, left_son);
     // Shrink the tree portion in subtrees.
-    SplayIntNode *r_tree = _spli_cut_right_subtree(node);
-    SplayIntNode *l_tree = _spli_cut_left_subtree(node);
-    SplayIntNode *l_tree_l = _spli_cut_left_subtree(left_son);
-    SplayIntNode *l_tree_r = _spli_cut_right_subtree(left_son);
+    SplayIntNode *r_tree, *l_tree, *l_tree_l, *l_tree_r;
+    r_tree = _spli_cut_right_subtree(node);
+    l_tree = _spli_cut_left_subtree(node);
+    l_tree_l = _spli_cut_left_subtree(left_son);
+    l_tree_r = _spli_cut_right_subtree(left_son);
     // Recombine portions to respect the search property.
     _spli_insert_right_subtree(l_tree, r_tree);
     _spli_insert_left_subtree(l_tree, l_tree_r);
@@ -466,10 +412,11 @@ void _spli_left_rotation(SplayIntNode *node) {
     // Swap the node and its son's contents to make it climb.
     _spli_swap_info(node, right_son);
     // Shrink the tree portion in subtrees.
-    SplayIntNode *r_tree = _spli_cut_right_subtree(node);
-    SplayIntNode *l_tree = _spli_cut_left_subtree(node);
-    SplayIntNode *r_tree_l = _spli_cut_left_subtree(right_son);
-    SplayIntNode *r_tree_r = _spli_cut_right_subtree(right_son);
+    SplayIntNode *r_tree, *l_tree, *r_tree_l, *r_tree_r;
+    r_tree = _spli_cut_right_subtree(node);
+    l_tree = _spli_cut_left_subtree(node);
+    r_tree_l = _spli_cut_left_subtree(right_son);
+    r_tree_r = _spli_cut_right_subtree(right_son);
     // Recombine portions to respect the search property.
     _spli_insert_left_subtree(r_tree, l_tree);
     _spli_insert_right_subtree(r_tree, r_tree_l);
@@ -548,125 +495,10 @@ SplayIntNode *_spli_join(SplayIntNode *left_root, SplayIntNode *right_root) {
     if (right_root == NULL) return left_root;
     // Not-so-easy case: splay the largest-key node in the left subtree and
     // then join the right as right subtree.
-    SplayIntNode *left_max = _spli_max_key_son(left_root);
+    SplayIntNode *left_max;
+    left_max = _spli_max_key_son(left_root);
     while (left_root != left_max)
         left_max = _spli_splay(left_max);
     _spli_insert_right_subtree(left_root, right_root);
     return left_root;
-}
-
-/*
- * Performs an in-order, recursive DFS.
- *
- * @param root_node Root of the subtree to start the search onto.
- * @param int_ptr Internal pointer to a pointer to the return array.
- * @param int_opt Internal options passed value.
- */
-void _spli_inodfs(SplayIntNode *root_node, void ***int_ptr, int int_opt) {
-    // Recursion base step.
-    if (root_node == NULL) {
-        // Correctly update the pointer.
-        if (int_opt & SEARCH_KEYS) {
-            *(int_ptr) = (void **)((int *)*(int_ptr) - 1);
-        } else *(int_ptr) = *(int_ptr) - 1;
-        return;
-    }
-    // Recursive step: visit the left son.
-    _spli_inodfs(root_node->_left_son, int_ptr, int_opt);
-    // Correctly increment the internal pointer.
-    if (int_opt & SEARCH_KEYS) {
-        *(int_ptr) = (void **)((int *)*(int_ptr) + 1);
-    } else *(int_ptr) = *(int_ptr) + 1;
-    // Now visit the root node.
-    if (int_opt & SEARCH_NODES) {
-        **(int_ptr) = root_node;
-    } else if (int_opt & SEARCH_KEYS) {
-        *(int *)*(int_ptr) = root_node->_key;
-    } else if (int_opt & SEARCH_DATA) {
-        **(int_ptr) = root_node->_data;
-    }
-    // Correctly increment the internal pointer.
-    if (int_opt & SEARCH_KEYS) {
-        *(int_ptr) = (void **)((int *)*(int_ptr) + 1);
-    } else *(int_ptr) = *(int_ptr) + 1;
-    // Visit the right son and return.
-    _spli_inodfs(root_node->_right_son, int_ptr, int_opt);
-}
-
-/*
- * Performs a pre-order, recursive DFS.
- *
- * @param root_node Root of the subtree to start the search onto.
- * @param int_ptr Internal pointer to a pointer to the return array.
- * @param int_opt Internal options passed value.
- */
-void _spli_preodfs(SplayIntNode *root_node, void ***int_ptr, int int_opt) {
-    // Recursion base step.
-    if (root_node == NULL) {
-        // Correctly update the pointer.
-        if (int_opt & SEARCH_KEYS) {
-            *(int_ptr) = (void **)((int *)*(int_ptr) - 1);
-        } else *(int_ptr) = *(int_ptr) - 1;
-        return;
-    }
-    // Recursive step.
-    // Visit the root node.
-    if (int_opt & SEARCH_NODES) {
-        **(int_ptr) = root_node;
-    } else if (int_opt & SEARCH_KEYS) {
-        *(int *)*(int_ptr) = root_node->_key;
-    } else if (int_opt & SEARCH_DATA) {
-        **(int_ptr) = root_node->_data;
-    }
-    // Correctly increment the internal pointer.
-    if (int_opt & SEARCH_KEYS) {
-        *(int_ptr) = (void **)((int *)*(int_ptr) + 1);
-    } else *(int_ptr) = *(int_ptr) + 1;
-    // Now visit the left son.
-    _spli_preodfs(root_node->_left_son, int_ptr, int_opt);
-    // Correctly increment the internal pointer.
-    if (int_opt & SEARCH_KEYS) {
-        *(int_ptr) = (void **)((int *)*(int_ptr) + 1);
-    } else *(int_ptr) = *(int_ptr) + 1;
-    // Visit the right son and return.
-    _spli_preodfs(root_node->_right_son, int_ptr, int_opt);
-}
-
-/*
- * Performs a post-order, recursive DFS.
- *
- * @param root_node Root of the subtree to start the search onto.
- * @param int_ptr Internal pointer to a pointer to the return array.
- * @param int_opt Internal options passed value.
- */
-void _spli_postodfs(SplayIntNode *root_node, void ***int_ptr, int int_opt) {
-    // Recursion base step.
-    if (root_node == NULL) {
-        // Correctly update the pointer.
-        if (int_opt & SEARCH_KEYS) {
-            *(int_ptr) = (void **)((int *)*(int_ptr) - 1);
-        } else *(int_ptr) = *(int_ptr) - 1;
-        return;
-    }
-    // Recursive step.
-    // Visit the left son.
-    _spli_postodfs(root_node->_left_son, int_ptr, int_opt);
-    // Correctly increment the internal pointer.
-    if (int_opt & SEARCH_KEYS) {
-        *(int_ptr) = (void **)((int *)*(int_ptr) + 1);
-    } else *(int_ptr) = *(int_ptr) + 1;
-    // Visit the right son.
-    _spli_postodfs(root_node->_right_son, int_ptr, int_opt);
-    // Correctly increment the internal pointer.
-    if (int_opt & SEARCH_KEYS) {
-        *(int_ptr) = (void **)((int *)*(int_ptr) + 1);
-    } else *(int_ptr) = *(int_ptr) + 1;
-    // Visit the root node and return.
-    if (int_opt & SEARCH_NODES) {
-        **(int_ptr) = root_node;
-    } else if (int_opt & SEARCH_KEYS) {
-        *(int *)*(int_ptr) = root_node->_key;
-    } else if (int_opt & SEARCH_DATA) {
-        **(int_ptr) = root_node->_data;
-    }
 }
