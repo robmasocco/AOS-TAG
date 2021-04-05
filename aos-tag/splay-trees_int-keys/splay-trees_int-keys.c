@@ -25,6 +25,8 @@
  * It lacks many unnecessary things and does others differently.
  */
 
+#include <linux/kernel.h>
+#include <linux/module.h>
 #include <linux/slab.h>
 #include <limits.h>
 #include "splay-trees_int-keys/splay-trees_int-keys.h"
