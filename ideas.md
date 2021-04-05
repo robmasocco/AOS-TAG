@@ -334,7 +334,6 @@ The condition value is protected by an rw_sem and there's also an atomic presenc
 
 # TODO LIST
 
-- BST-Dictionary implementation.
 - Signals, interrupts, preemption and the like checks against deadlocks and similar problems. Remember that wait queues functions return *-ERESTARTSYS* when a signal was delivered. See our little golden screenshot from our course materials to know how signals work (and remember: they're usermode shit, you just return -EINTR).
 - Check TSO compliance everywhere, add memory fences where needed.
 - Check against false cache sharing everywhere. Remember that one of our cache lines is 64-bytes long.

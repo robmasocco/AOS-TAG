@@ -61,6 +61,11 @@ typedef unsigned long int ulong;
 #define BFS_LEFT_FIRST 0x100
 #define BFS_RIGHT_FIRST 0x200
 
+/*
+ * x86 cache line size, in bytes.
+ */
+#define X86_CACHE_LINE_SZ 64
+
 /* 
  * A Splay Tree's node stores pointers to its "father" node and to its sons.
  * Since we're using the "splay" heuristic, no balance information is stored.
@@ -70,14 +75,18 @@ typedef unsigned long int ulong;
  * Note that, as per the deletion options, is not possible to have only SOME
  * data in the heap: either all or none, so think about the data you're
  * providing to these functions.
+ * NOTE: In this implementation, we try to align nodes to cache lines in order
+ *       to optimize accesses using hot cache lines and the splay tree behaviour
+ *       during searches.
  */
-typedef struct _splay_int_node {
+struct _splay_int_node {
     struct _splay_int_node *_father;
     struct _splay_int_node *_left_son;
     struct _splay_int_node *_right_son;
     int _key;
     void *_data;
-} SplayIntNode;
+} __attrbute__ ((aligned (X86_CACHE_LINE_SZ)));
+typedef struct _splay_int_node SplayIntNode;
 
 /*
  * A Splay Tree stores a pointer to its root node and a counter which keeps
@@ -86,12 +95,14 @@ typedef struct _splay_int_node {
  * Splay trees implemented like this have a size limit set by the maximum
  * amount representable with an unsigned long integer, automatically set (as
  * long as you compile this code on the same machine you're going to use it on).
+ * NOTE: In this implementation, we try to align trees to cache lines in order
+ *       to optimize accesses using hot cache lines during searches.
  */
 typedef struct {
     SplayIntNode *_root;
     unsigned long int nodes_count;
     unsigned long int max_nodes;
-} SplayIntTree;
+} __attribute__ ((aligned (X86_CACHE_LINE_SZ))) SplayIntTree;
 
 /* Library functions. */
 SplayIntTree *create_splay_int_tree(void);
