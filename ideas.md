@@ -73,7 +73,8 @@ Returns 0 if the message was read, or -1 and *errno* is set to indicate the caus
 - Read current condition value.
 - Atomically increment epoch presence counter.
 - Release condition rw_sem as reader.
-- Wait on the queue (with *wait_event_interruptible(...)*) with condition according to current condition value (*if 0 wait on 1 else wait on 0*, an *if-else* should suffice). Catch signals here and be very careful about which locks to release and counters to atomically decrease upon exit!!!
+- Wait on the queue (with *wait_event_interruptible(...)*) with *curr_condition || globl_condition*. Catch signals here and be very careful about which locks to release and counters to atomically decrease upon exit!!!
+- If *globl_condition == True* exit (we've been awoken).
 - *preempt_disable()*
 - *memcpy* the new message from the level buffer into an on-the-go-set array in the stack.
 - Atomically decrease epoch presence counter (with preemption disabled!).
