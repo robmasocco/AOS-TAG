@@ -201,7 +201,6 @@ Each entry holds:
 - Pointer to a preallocated message buffer (using *kmalloc*).
 - size_t size of the message currently stored.
 - Mutex to mutually exclude writers.
-- Single char/int used as condition value for the wait queue.
 - Level condition struct.
 
 ## CONDITION DATA STRUCTURE
