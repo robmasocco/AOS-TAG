@@ -192,17 +192,23 @@ Each entry holds:
 - Array of 32 level data structures.
 - Creator EUID.
 - Protection-enabled binary flag. Set by *tag_get* upon instance creation, enables permissions checks for subsequent operations.
-- Array of 32 atomic counters, one for each level, to count the readers.
+- Instance-global wait queue.
+- Mutex to mutually exclude threads that execute an *AWAKE_ALL*.
+- AWAKE-ALL condition struct.
 
 ## LEVEL DATA STRUCTURE
 
-- Wait queue head (which embeds a spinlock).
 - Pointer to a preallocated message buffer (using *kmalloc*).
 - size_t size of the message currently stored.
 - Mutex to mutually exclude writers.
 - Single char/int used as condition value for the wait queue.
-- rw_sem "condition rw_sem" to synchronize readers and writers together. This has to be sleeping since it has to allow existing readers to consume the message (the writer might also exchange its place for one of them this way, freeing an additional CPU core).
-- Atomic epoch presence counter, to have writers wait for all registered readers when a message is delivered.
+- Level condition struct.
+
+## CONDITION DATA STRUCTURE
+
+- One atomic char *epoch selector*.
+- Array of two char *conditions*.
+- Array of two atomic long *presence counters*.
 
 # MODULE PARAMETERS
 
@@ -210,7 +216,7 @@ Consider adding anything you might need to debug this module.
 
 - System call numbers (one pseudofile each) (read-only).
 - Max number of active instances (configurable at insertion but checked: must not drop below 256) (read-only).
-- Max message size (configurable at insertion but checked: must not drop below 4 KB) (read-only).
+- Max message size (configurable at insertion but checked: must not drop below 4 KB) (read-only). Comment in the docs/README that this better be page-aligned.
 
 # CHAR DEVICE DRIVER
 
