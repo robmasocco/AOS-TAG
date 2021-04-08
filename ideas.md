@@ -353,4 +353,5 @@ The condition value is protected by an rw_sem and there's also an atomic presenc
 - *__randomize_layout* of some structs?
 - Docs in here:
     - A README for SCTH.
+    - Noted on module locking.
 
