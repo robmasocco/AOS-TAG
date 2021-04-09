@@ -80,15 +80,13 @@ Returns 0 if the message was read, or -1 and *errno* is set to indicate the caus
 - Release instance condition rwlock as reader (as above).
 - Wait on the instance queue (with *wait_event_interruptible(...)*) with (*curr_condition || curr_globl_condition*). Catch signals here and be very careful about which locks to release and counters to atomically decrement upon exit!!!
 - If *curr_globl_condition == True* we've been awoken:
-    - Atomically decrement global epoch presence counter.
+    - Atomically decrement both global and level epoch presence counter.
     - Exit.
-- *preempt_disable()* (all that happens inside this section does so because we want these things to happen **fast**, but without blocking IRQs).
-- *memcpy* the new message from the level buffer into an on-the-go-set array in the stack.
+- Atomically decrement global epoch presence counter. We're up now, no need to delay this further.
+- If message size != 0 && usermode buffer size is enough:
+    - *copy_to_user* the new message from the pointed buffer.
 - Atomically decrement epoch presence counter.
-- Atomically decrement global epoch presence counter.
-- *preempt_enable()*
-- Release receivers's rw_sem as a reader (no need to delay this further: we don't need the instance anymore).
-- *Copy_to_user* the new message.
+- Release receivers's rw_sem as a reader.
 - *module_put*
 - Return.
 
@@ -111,25 +109,25 @@ Returns 0 if the message was correctly sent, or -1 and *errno* is set to indicat
 - Lock senders's rw_sem as reader.
 - Check instance pointer, eventually exit.
 - Check permissions if required (flag), eventually exit.
-- *Copy_from_user* into an on-the-go-set array in the stack.
 - Acquire level writers mutex.
 - Acquire level condition rwlock as writer (allowing IRQs).
 - Atomically read and flip the current *condition selector* from the level condition struct. This is the linearization point for the message buffer. Save the previous value.
 - **MEMORY FENCE**
 - Release level condition rwlock as writer (as above).
 - Atomically read the current *epoch presence counter* from the level condition struct: exit if it is zero (no one is waiting for a message on this level, so discard yours).
-- *preempt_disable()* (all that happens inside this section does so because we want these things to happen **fast**, but without blocking IRQs).
-- *memcpy* the message in the level buffer.
+- *kmalloc* a properly-sized message buffer.
+- *copy_from_user* into the new message buffer. This is slow, might block and all, but we want to do it only if necessary, so if we need to discard the message we don't waste any memory and time doing it, we just exit as above.
+- Set the level message pointer to the new buffer.
 - Set message size.
 - Set the now "old" level condition to 0x1.
 - **STORE FENCE** (One can never be too sure.)
-- *preempt_enable()*
 - While the old *epoch presence counter* doesn't become zero:
     - Wake up the instance wait queue (use *wake_up(...)*).
         This avoids some really bad race conditions.
 - Reset the old level condition to 0x0.
-- *memset* level buffer to 0 and set size to 0 (for security).
+- Set size to 0.
 - **STORE FENCE**
+- *kfree* the message buffer (all registered receivers read it at this point).
 - Release level writers mutex.
 - Release senders's rw_sem as reader.
 - *module_put*
@@ -212,7 +210,7 @@ Each entry holds:
 ## INSTANCE DATA STRUCTURE
 - Key.
 - For the levels, arrays of 32:
-    - Pointers to message buffers.
+    - char * pointers to message buffers.
     - size_t sizes of the messages stored.
     - Mutexes to mutually exclude senders on each level.
     - Level conditions structs.
@@ -352,7 +350,7 @@ Also, threads that come from the VFS while doing an *open* must synchronize with
 
 ## POSTING A MESSAGE ON A LEVEL
 
-The writer posts a message in the level buffer (together with its size), updates the wakeup condition, then wakes readers up. Readers *memcpy* contents into an on-the-go-set array in the stack; then, they call *copy_to_user*. Buffers are preallocated for each level (compromise between complexity and resource usage). Local copying sections run with preemption disabled for the sake of speed.
+The writer posts a message in the level buffer (together with its size), updates the wakeup condition, then wakes readers up. Kernel-side arrays are dynamically allocated to allow for messages greater than two pages (8 MB). Considering also the *copy_\** APIs, it won't be quick, but it won't waste any memory and use only what is necessary at any given time.
 
 The wakeup condition is a particular epoch-based struct: it implements a variation of the algorithm used in RCU linked lists. When the epoch selector gets flipped, that's a linearization point for the message buffer: all receiver threads that got in there before this will get the message, others were too late. The only difference is the need for an rwlock to avoid that the epoch selector gets flipped before a receiver can atomically increment the corresponding epoch presence counter: this is required here because if not, there could be some unlikely but dangerous race conditions that would lead to a receiver registering to an epoch that is *two times ahead* the one that it believes to be in, thus behaving incorrectly and skipping a message that it should get.
 
@@ -361,8 +359,6 @@ Writers wait for all readers that got a condition value, i.e. they busy-wait on 
 # TODO LIST
 
 - Signals, interrupts, preemption and the like checks against deadlocks and similar problems. Remember that wait queues functions return *-ERESTARTSYS* when a signal was delivered. See our little golden screenshot from our course materials to know how signals work (and remember: they're usermode shit, you just return -EINTR).
-- Check TSO compliance everywhere, add memory fences where needed.
-- Check against false cache sharing everywhere. Remember that one of our cache lines is 64-bytes long.
 - Anything still marked as TODO here.
 - Load and unload scripts, that handle *insmod*, *rmmod* and possibly compilation accordingly.
 
@@ -374,5 +370,5 @@ Writers wait for all readers that got a condition value, i.e. they busy-wait on 
 - *__randomize_layout* of some structs?
 - Docs in here:
     - A README for SCTH.
-    - Noted on module locking.
+    - Noted on module locking, as above.
 
