@@ -122,7 +122,7 @@ Returns 0 if the message was correctly sent, or -1 and *errno* is set to indicat
 - *memcpy* the message in the level buffer.
 - Set message size.
 - Set the now "old" level condition to 0x1.
-- **STORE FENCE** (one can never be too sure).
+- **STORE FENCE** (One can never be too sure.)
 - *preempt_enable()*
 - While the old *epoch presence counter* doesn't become zero:
     - Wake up the instance wait queue (use *wake_up(...)*).
@@ -151,6 +151,16 @@ Returns 0 if the requested operation was completed successfully, or -1 and *errn
 - Consistency checks on input arguments.
 - If *command* is *AWAKE_ALL*:
     - Acquire instance awake_all mutex.
+    - Acquire instance condition rwlock as writer (allowing IRQs).
+    - Atomically read and flip the current *condition selector* from the instance condition struct. Save the previous value.
+    - Release instance condition rwlock as writer (as above).
+    - Set the now "old" global condition to 0x1.
+    - **STORE FENCE** (One can never be too sure.)
+    - While the old *global epoch presence counter* doesn't become zero:
+        - Wake up the instance wait queue (use *wake_up(...)*).
+            This avoids some really bad race conditions.
+    - Reset the old instance condition to 0x0.
+    - **STORE FENCE**
     - Release instance awake_all mutex.
 - If *command* is *REMOVE*:
     - Trylock receivers rw_sem as writer, exit if this fails since at least a reader is there.
