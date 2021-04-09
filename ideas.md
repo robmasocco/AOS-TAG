@@ -68,10 +68,16 @@ Returns 0 if the message was read, or -1 and *errno* is set to indicate the caus
 - Lock receivers's rw_sem as reader (use the *_interruptible* variant here).
 - Check instance pointer, eventually exit.
 - Check permissions if required (flag), eventually exit.
+- Acquire level condition rwlock as reader (allowing IRQs).
 - Atomically read the current *condition selector* from the level condition struct.
 - Atomically increment the current *epoch presence counter* in the level condition struct.
+- **MEMORY FENCE**
+- Release level condition rwlock as reader (as above).
+- Acquire instance condition rwlock as reader (allowing IRQs).
 - Atomically read the current *global condition selector* from the instance condition struct.
 - Atomically increment the current *global epoch presence counter* in the instance condition struct.
+- **MEMORY FENCE**
+- Release instance condition rwlock as reader (as above).
 - Wait on the instance queue (with *wait_event_interruptible(...)*) with (*curr_condition || curr_globl_condition*). Catch signals here and be very careful about which locks to release and counters to atomically decrement upon exit!!!
 - If *curr_globl_condition == True* we've been awoken:
     - Atomically decrement global epoch presence counter.
@@ -107,12 +113,14 @@ Returns 0 if the message was correctly sent, or -1 and *errno* is set to indicat
 - Check permissions if required (flag), eventually exit.
 - *Copy_from_user* into an on-the-go-set array in the stack.
 - Acquire level writers mutex.
-- Atomically read the current *condition selector* from the level condition struct.
+- Acquire level condition rwlock as writer (allowing IRQs).
+- Atomically read and flip the current *condition selector* from the level condition struct. This is the linearization point for the message buffer. Save the previous value.
+- **MEMORY FENCE**
+- Release level condition rwlock as writer (as above).
 - Atomically read the current *epoch presence counter* from the level condition struct: exit if it is zero (no one is waiting for a message on this level, so discard yours).
 - *preempt_disable()* (all that happens inside this section does so because we want these things to happen **fast**, but without blocking IRQs).
 - *memcpy* the message in the level buffer.
 - Set message size.
-- Atomically flip the *condition selector* in the level condition struct. This is the linearization point for the message buffer.
 - Set the now "old" level condition to 0x1.
 - **STORE FENCE** (one can never be too sure).
 - *preempt_enable()*
@@ -142,7 +150,8 @@ Returns 0 if the requested operation was completed successfully, or -1 and *errn
 - *try_module_get*
 - Consistency checks on input arguments.
 - If *command* is *AWAKE_ALL*:
-    - Do more or less what is done in the *send* routine, but without setting a message or its length (leaving all to zero), and only trylocking the level writers mutex since if a writer is already there we got nothing to do.
+    - Acquire instance awake_all mutex.
+    - Release instance awake_all mutex.
 - If *command* is *REMOVE*:
     - Trylock receivers rw_sem as writer, exit if this fails since at least a reader is there.
     - Lock senders rw_sem as writer.
