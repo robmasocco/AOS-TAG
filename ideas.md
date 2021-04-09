@@ -216,7 +216,7 @@ Each entry holds:
 - Protection-enabled binary flag. Set by *tag_get* upon instance creation, enables permissions checks for subsequent operations.
 - Instance-global wait queue.
 - Mutex to mutually exclude threads that execute an *AWAKE_ALL*.
-- AWAKE-ALL condition struct.
+- AWAKE_ALL condition struct.
 
 ## LEVEL DATA STRUCTURE
 
@@ -230,6 +230,7 @@ Each entry holds:
 - One atomic char *epoch selector*.
 - Array of two char *conditions*.
 - Array of two atomic long *presence counters*.
+- rwlock "condition rwlock".
 
 # MODULE PARAMETERS
 
@@ -259,7 +260,7 @@ Takes a snapshot of the state of the AOS-TAG service and saves it in text form i
 
 Returns 0 if all was done successfully and the "file" is ready, or -1 and *errno* is set to indicate the cause of the error.
 
-Keep in mind that all data that forms the status of the system is at most 32 bits long, so many unsigned ints and type casts should suffice.
+Keep in mind that all data that forms the status of the system is at most 32 bits-long, so many unsigned ints and type casts should suffice.
 
 - Allocate a *line buffer* (80 chars) in the stack.
 - Allocate a 32-entries unsigned int array in the stack, for readers presence counters.
@@ -269,7 +270,8 @@ Keep in mind that all data that forms the status of the system is at most 32 bit
 - For each entry in the instance struct array:
     - Trylock senders rw_sem as reader, *continue* if it fails (means that the instance is unavailable: it is being removed or created).
     - If the instance struct pointer is not *NULL*:
-        - Get the key, the creator EUID and (atomically) the readers presence counters (in another *for* loop).
+        - Get the key, the creator EUID and (atomically?) the current epoch receivers presence counters (in another *for* loop).
+            Keep in mind that this is just a snapshot: we make the best effort we can at reading what is currently happening in the system, among all the possible race conditions that can occur, but that are don't cares for us since in the moment we got to read the status of that level, that was the epoch it was in.
         - **STORE FENCE**
         - Release senders rw_sem as reader.
         - For each of the 32 levels:
@@ -277,7 +279,7 @@ Keep in mind that all data that forms the status of the system is at most 32 bit
             - *snprintf* status information in the line buffer: "TAG-key TAG-creator TAG-level Waiting-threads", writing at most 80 chars. Get the number of bytes written, it'll be useful in a moment.
             - *memcpy* the contents of the line buffer in the file buffer. Add a newline character at the end.
             - Advance the pointer accordingly.
-    - Else: release senders rw_sem as reader.
+    - Else: release senders's rw_sem as reader.
 - Set the *private_data* member of the current *struct file* to the file buffer base.
 - Set all other required data, like *f_pos* and stuff. Is file size necessary?
 - Return.
