@@ -68,18 +68,18 @@ Returns 0 if the message was read, or -1 and *errno* is set to indicate the caus
 - Lock receivers's rw_sem as reader (use the *_interruptible* variant here).
 - Check instance pointer, eventually exit.
 - Check permissions if required (flag), eventually exit.
-- Atomically read the current *condition selector* from the level's condition struct.
+- Atomically read the current *condition selector* from the level condition struct.
 - Atomically increment the current *epoch presence counter* in the level condition struct.
 - Atomically read the current *global condition selector* from the instance condition struct.
-- Atomically increment the current *global epoch presence counter* in the instance's condition struct.
-- Wait on the instance queue (with *wait_event_interruptible(...)*) with (*curr_condition || curr_globl_condition*). Catch signals here and be very careful about which locks to release and counters to atomically decrease upon exit!!!
+- Atomically increment the current *global epoch presence counter* in the instance condition struct.
+- Wait on the instance queue (with *wait_event_interruptible(...)*) with (*curr_condition || curr_globl_condition*). Catch signals here and be very careful about which locks to release and counters to atomically decrement upon exit!!!
 - If *curr_globl_condition == True* we've been awoken:
     - Atomically decrement global epoch presence counter.
     - Exit.
 - *preempt_disable()* (all that happens inside this section does so because we want these things to happen **fast**, but without blocking IRQs).
 - *memcpy* the new message from the level buffer into an on-the-go-set array in the stack.
-- Atomically decrease epoch presence counter.
-- Atomically decrease global epoch presence counter.
+- Atomically decrement epoch presence counter.
+- Atomically decrement global epoch presence counter.
 - *preempt_enable()*
 - Release receivers's rw_sem as a reader (no need to delay this further: we don't need the instance anymore).
 - *Copy_to_user* the new message.
@@ -96,7 +96,7 @@ Ensure proper locks are released in each *if-else* to avoid deadlocks, that incr
 
 This configures the running thread as a *writer thread*.
 
-Might have to act in a particular way if messages have length zero, to not disturb *copy* APIs and the like.
+Only one writer should be active at any given time, since there's no message logging.
 
 Returns 0 if the message was correctly sent, or -1 and *errno* is set to indicate the cause of the error.
 
@@ -107,30 +107,29 @@ Returns 0 if the message was correctly sent, or -1 and *errno* is set to indicat
 - Check permissions if required (flag), eventually exit.
 - *Copy_from_user* into an on-the-go-set array in the stack.
 - Acquire level writers mutex.
-- Acquire wait queue spinlock.
-- Check for active readers (use *waitqueue_active(...)*), exit if there's none.
-- Release wait queue spinlock.
-- *preempt_disable()*
+- Atomically read the current *condition selector* from the level condition struct.
+- Atomically read the current *epoch presence counter* from the level condition struct: exit if it is zero (no one is waiting for a message on this level, so discard yours).
+- *preempt_disable()* (all that happens inside this section does so because we want these things to happen **fast**, but without blocking IRQs).
 - *memcpy* the message in the level buffer.
 - Set message size.
-- **STORE FENCE**
+- Atomically flip the *condition selector* in the level condition struct. This is the linearization point for the message buffer.
+- Set the now "old" level condition to 0x1.
+- **STORE FENCE** (one can never be too sure).
 - *preempt_enable()*
-- Acquire condition rw_sem as writer.
-- Flip level condition value (a XOR with 0x1 should suffice).
-- Wake up the entire wait queue (use *wake_up(...)* on the level wait queue).
-- Busy-wait on the epoch presence counter to become zero.
-- Release condition rw_sem as writer.
+- While the old *epoch presence counter* doesn't become zero:
+    - Wake up the instance wait queue (use *wake_up(...)*).
+        This avoids some really bad race conditions.
+- Reset the old level condition to 0x0.
 - *memset* level buffer to 0 and set size to 0 (for security).
+- **STORE FENCE**
 - Release level writers mutex.
 - Release senders's rw_sem as a reader.
 - *module_put*
 - Return.
 
-TSO bypasses are avoided by executing memory barriers and those embedded in spinlocks and wait queue APIs.
+TSO bypasses are avoided by executing memory barriers and those embedded in spinlocks and wait queue APIs, and by using GCC atomic builtins.
 
-Only one writer should be active at any given time.
-
-Ensure to speed things up a bit if read message length is zero, so the thread just had to be awoken.
+Ensure to speed things up a bit if message length is zero, so the thread just have to be awoken and no blocking *copy_from_user* API is ever called.
 
 Ensure proper locks are released in each *if-else* to avoid deadlocks, and that the module is always released.
 
