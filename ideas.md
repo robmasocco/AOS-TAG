@@ -10,7 +10,7 @@ Brainstorming table for whatever needs to be discussed before the coding starts.
 - The device file driver only has to scan the array.
 - Permissions are implemented as simple checks of the current EUID against the creator's EUID when a thread calls a *send* or a *receive* on an active instance. Such EUID is stored upon creation of the instance and checked each time it is acted upon.
 - When loaded, this does a *try_module_get* on the *scth* module in the *init_module*, which is a dependency, releasing it with a *module_put* in *cleanup_module*.
-- Routines should be embedded into functions, to simplify code-writing, system calls definitions and device drivers coding (if we ever get to that).
+- Routines should be embedded into functions, to simplify code-writing, system calls definitions and device drivers coding.
 
 ## BINARY SEARCH TREE
 
@@ -26,7 +26,7 @@ Brainstorming table for whatever needs to be discussed before the coding starts.
 
 ## *int tag_get(int key, int command, int permission)*
 
-Opens a new instance of the service. You can open whatever instance you want but if permissions aren't ok for you then **all subsequent *receives* and *sends* will fail**. This behavior is intended since tag descriptors don't really mean much.
+Opens a new instance of the service. You can open whatever instance you want but if permissions aren't ok for you then **all subsequent *receives* and *sends* will fail**. This behavior is intended since tag descriptors don't really mean much, i.e. we need to check for them in *receive* and *send* that could be called on a different instance than the one originally intended if someone called a *REMOVE* in the meantime, so it doesn't make much sense to also check them here.
 
 This uses instance rw_sems as a writer to avoid race conditions on an instance.
 
@@ -68,28 +68,27 @@ Returns 0 if the message was read, or -1 and *errno* is set to indicate the caus
 - Lock receivers's rw_sem as reader (use the *_interruptible* variant here).
 - Check instance pointer, eventually exit.
 - Check permissions if required (flag), eventually exit.
-- Atomically increment level readers counter in the instance struct.
-- Acquire condition rw_sem as reader (this might be *_interruptible*).
-- Read current condition value.
-- Atomically increment epoch presence counter.
-- Release condition rw_sem as reader.
-- Wait on the queue (with *wait_event_interruptible(...)*) with *curr_condition || globl_condition*. Catch signals here and be very careful about which locks to release and counters to atomically decrease upon exit!!!
-- If *globl_condition == True* exit (we've been awoken).
-- *preempt_disable()*
+- Atomically read the current *condition selector* from the level's condition struct.
+- Atomically increment the current *epoch presence counter* in the level condition struct.
+- Atomically read the current *global condition selector* from the instance condition struct.
+- Atomically increment the current *global epoch presence counter* in the instance's condition struct.
+- Wait on the instance queue (with *wait_event_interruptible(...)*) with (*curr_condition || curr_globl_condition*). Catch signals here and be very careful about which locks to release and counters to atomically decrease upon exit!!!
+- If *curr_globl_condition == True* we've been awoken:
+    - Atomically decrement global epoch presence counter.
+    - Exit.
+- *preempt_disable()* (all that happens inside this section does so because we want these things to happen **fast**, but without blocking IRQs).
 - *memcpy* the new message from the level buffer into an on-the-go-set array in the stack.
-- Atomically decrease epoch presence counter (with preemption disabled!).
-- Atomically decrease level readers counter in the instance struct (this too with preemption disabled, because why not?).
+- Atomically decrease epoch presence counter.
+- Atomically decrease global epoch presence counter.
 - *preempt_enable()*
-- Release receivers's rw_sem as a reader (no need to delay this further).
+- Release receivers's rw_sem as a reader (no need to delay this further: we don't need the instance anymore).
 - *Copy_to_user* the new message.
 - *module_put*
 - Return.
 
-TSO bypasses are avoided by executing memory barriers embedded in spinlocks and wait queue APIs.
+TSO bypasses are avoided by executing memory barriers embedded in spinlocks and wait queue APIs, and by using atomic GCC builtins.
 
-Even if new readers register themselves on the queue, those just awoken should prevent writers from running until they get the newest message.
-
-Ensure to speed things up a bit if read message length is zero, so the thread just had to be awoken.
+Ensure to speed things up a bit if read message length is zero.
 
 Ensure proper locks are released in each *if-else* to avoid deadlocks, that incremented counters are always subsequently decremented, and that the module is always released.
 
