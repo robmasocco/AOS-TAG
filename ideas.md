@@ -46,9 +46,9 @@ Returns the tag descriptor (array index) of the new instance, or -1 and *errno* 
     - Linearly scan the bitmask to find a free entry in the array, then add it to the set and save the index.
     - Release bitmask spinlock (as above).
     - Allocate and accordingly initialize a new instance struct.
-    - Acquire both rw_sems as writer.
+    - Acquire both instance rw_sems as writer.
     - Set the instance struct pointer to the new struct's address.
-    - Release both rw_sems as writer.
+    - Release both instance rw_sems as writer.
     - If key is not *IPC_PRIVATE*:
         - Add a new entry to the tree.
         - Release the tree rw_sem as a writer.
@@ -349,7 +349,7 @@ When a receiver comes it locks its semaphore as reader, checks the pointer, even
 When a sender comes it locks its semaphore as reader, checks the pointer, eventually does its thing and unlocks the semaphore as reader.
 These are both real locks since potential writers are *removers* and *adders*, both having a very short and deterministic critical section, and are deadlock-proof.
 
-Things are a little bit different when *adding* an instance: at first, the bitmask is atomically checked for a free spot, then the *adder* thread locks both rw_sems as a writer since being the pointer *NULL*, eventual readers/writers would almost immediately get out, then sets the pointer to that of a new instance struct.
+Things are a little bit different when *adding* an instance: at first, the bitmask is atomically checked for a free spot, then the *adder* thread locks both rw_sems as a writer since being the pointer *NULL*, eventual readers/writers would almost immediately get out, then sets the pointer to that of a new instance struct. The BST is kept locked during this in order to avoid adding a same key possibly multiple times.
 
 Also, threads that come from the VFS while doing an *open* must synchronize with *adders* and *removers* to take a snapshot of each instance before it fades away. This can be accomplished by locking the senders rw_sem and checking the instance pointer. Using the receivers one causes a false positive for removers that want to check if no reader is there, this way they'd only have to wait for the snapshot to be taken since these threads deterministically release this rw_sem shortly after.
 
@@ -357,9 +357,9 @@ Also, threads that come from the VFS while doing an *open* must synchronize with
 
 The writer posts a message in the level buffer (together with its size), updates the wakeup condition, then wakes readers up. Readers *memcpy* contents into an on-the-go-set array in the stack; then, they call *copy_to_user*. Buffers are preallocated for each level (compromise between complexity and resource usage). Local copying sections run with preemption disabled for the sake of speed.
 
-The wakeup condition is a single value which is flipped each time a writer posts a message, and readers will always wait on the opposite value; thus, this works as a linearization point for the level data structure state (evident if you see the pseudocode above).
+The wakeup condition is a particular epoch-based struct: it implements a variation of the algorithm used in RCU linked lists. When the epoch selector gets flipped, that's a linearization point for the message buffer: all receiver threads that got in there before this will get the message, others were too late. The only difference is the need for an rwlock to avoid that the epoch selector gets flipped before a receiver can atomically increment the corresponding epoch presence counter: this is required here because if not, there could be some unlikely but dangerous race conditions that would lead to a receiver registering to an epoch that is *two times ahead* the one that it believes to be in, thus behaving incorrectly and skipping a message that it should get.
 
-The condition value is protected by an rw_sem and there's also an atomic presence counter to distinguish between the moments when a message has been posted and has yet to be posted in a concurrent scenario for the readers, and make writers wait for all readers that got a condition value. This allows for some degree of concurrency, but heavily relies on having the wait queues APIs check the condition before going to sleep. Reading the current condition value at first, before atomically incrementing the presence counter, is very important to sync with the state, avoid deadlocks and be waited by the very next writer.
+Writers wait for all readers that got a condition value, i.e. they busy-wait on the "old" presence counter to become zero. This allows for some degree of concurrency and, knowing the wait queues APIs check the condition before going to sleep, helps to prevent that a reader that didn't see the condition update and didn't get in the wait queue before the wake_up got done will be eventually awoken. Reading the current condition value at first, before atomically incrementing the presence counter, is very important to sync with the state, avoid deadlocks and be waited by the very next writer.
 
 # TODO LIST
 
