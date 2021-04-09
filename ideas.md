@@ -131,7 +131,7 @@ Returns 0 if the message was correctly sent, or -1 and *errno* is set to indicat
 - *memset* level buffer to 0 and set size to 0 (for security).
 - **STORE FENCE**
 - Release level writers mutex.
-- Release senders's rw_sem as a reader.
+- Release senders's rw_sem as reader.
 - *module_put*
 - Return.
 
@@ -150,6 +150,9 @@ Returns 0 if the requested operation was completed successfully, or -1 and *errn
 - *try_module_get*
 - Consistency checks on input arguments.
 - If *command* is *AWAKE_ALL*:
+    - Lock senders's rw_sem as reader.
+    - Check instance pointer, eventually exit.
+    - Check permissions if required (flag), eventually exit.
     - Acquire instance awake_all mutex.
     - Acquire instance condition rwlock as writer (allowing IRQs).
     - Atomically read and flip the current *condition selector* from the instance condition struct. Save the previous value.
@@ -162,6 +165,7 @@ Returns 0 if the requested operation was completed successfully, or -1 and *errn
     - Reset the old instance condition to 0x0.
     - **STORE FENCE**
     - Release instance awake_all mutex.
+    - Release senders's rw_sem as reader.
 - If *command* is *REMOVE*:
     - Trylock receivers rw_sem as writer, exit if this fails since at least a reader is there.
     - Lock senders rw_sem as writer.
