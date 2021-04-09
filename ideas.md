@@ -211,19 +211,16 @@ Each entry holds:
 
 ## INSTANCE DATA STRUCTURE
 - Key.
-- Array of 32 level data structures.
+- For the levels, arrays of 32:
+    - Pointers to message buffers.
+    - size_t sizes of the messages stored.
+    - Mutexes to mutually exclude senders on each level.
+    - Level conditions structs.
 - Creator EUID.
 - Protection-enabled binary flag. Set by *tag_get* upon instance creation, enables permissions checks for subsequent operations.
 - Instance-global wait queue.
 - Mutex to mutually exclude threads that execute an *AWAKE_ALL*.
-- AWAKE_ALL condition struct.
-
-## LEVEL DATA STRUCTURE
-
-- Pointer to a preallocated message buffer (using *kmalloc*).
-- size_t size of the message currently stored.
-- Mutex to mutually exclude writers.
-- Level condition struct.
+- Instance-global condition struct.
 
 ## CONDITION DATA STRUCTURE
 
