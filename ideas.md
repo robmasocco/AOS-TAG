@@ -80,7 +80,7 @@ Returns 0 if the message was read, or -1 and *errno* is set to indicate the caus
 - Atomically increment the current *global epoch presence counter* in the instance condition struct.
 - **MEMORY FENCE**
 - Release instance condition rwlock as reader (as above).
-- Wait on the instance queue (with *wait_event_interruptible(...)*) with (*curr_condition || curr_globl_condition*). Catch signals here and be very careful about which locks to release and counters to atomically decrement upon exit!!!
+- Wait on the current epoch's level queue (with *wait_event_interruptible(...)*) with (*curr_condition || curr_globl_condition*). Catch signals here and be very careful about which locks to release and counters to atomically decrement upon exit!!!
 - If *curr_globl_condition == True* we've been awoken:
     - Atomically decrement both global and level epoch presence counter.
     - Exit.
@@ -125,9 +125,9 @@ Returns 0 if the message was correctly sent, or -1 and *errno* is set to indicat
 - Set message size.
 - Set the now "old" level condition to 0x1.
 - **STORE FENCE** (One can never be too sure.)
-- Wake up the level wait queue (use *wake_up_all(...)*).
+- Wake up the current epoch's level wait queue (use *wake_up_all(...)*).
     Note that the APIs used prevent the "Lost wake-up problem".
-    Also note that this call grabs the queue spinlock, wakes all readers that "got the message" in a single pass and then releases the queue spinlock. Could it try to also wake up some "new readers", i.e. threads that are waiting for the new epoch's condition but in the meantime went to sleep in here? Yes. It's a risk we take.
+    Also note that this call grabs the queue spinlock, wakes all readers that "got the message" in a single pass and then releases the queue spinlock. We're sure that all the threads that are in here must be awoken and are those that actually got the message, while those that came too late have been diverted onto the other queue.
 - Busy-wait on the old epoch presence counter to become zero.
 - Set message size to 0 and buffer pointer to NULL (all registered receivers read it at this point). Save it to *kfree* it in a bit.
 - **STORE FENCE**
@@ -164,7 +164,7 @@ Returns 0 if the requested operation was completed successfully, or -1 and *errn
     - Set the now "old" global condition to 0x1.
     - **STORE FENCE** (One can never be too sure.)
     - For each level in the instance:
-        - Wake up the level wait queue (use *wake_up_all(...)*).
+        - Wake up both level wait queues (use *wake_up_all(...)*).
             Note that the APIs used prevent the "Lost wake-up problem".
     - Busy-wait on old global epoch presence counter to become zero.
         This still needs to happen because even if there's no buffer to read from, the threads that were awoken need to *consume the condition*, i.e. be able to check that it is verified before another awaker comes and resets it.
@@ -220,7 +220,7 @@ Each entry holds:
     - char * pointers to message buffers.
     - size_t sizes of the messages stored.
     - Mutexes to mutually exclude senders on each level.
-    - Wait queues.
+    - Array of 2 wait queues.
     - Level conditions structs.
 - Creator EUID.
 - Protection-enabled binary flag. Set by *tag_get* upon instance creation, enables permissions checks for subsequent operations.
@@ -272,8 +272,8 @@ Keep in mind that all data that forms the status of the system is at most 32 bit
 - For each entry in the instance struct array:
     - Trylock senders rw_sem as reader, *continue* if it fails (means that the instance is unavailable: it is being removed or created).
     - If the instance struct pointer is not *NULL*:
-        - Get the key, the creator EUID and (atomically?) the current epoch receivers presence counters (in another *for* loop).
-            Keep in mind that this is just a snapshot: we make the best effort we can at reading what is currently happening in the system, among all the possible race conditions that can occur, but that are don't cares for us since in the moment we got to read the status of that level, that was the epoch it was in.
+        - Get the key, the creator EUID and (atomically) the current epoch receivers presence counters (in another *for* loop).
+            Keep in mind that this is just a snapshot: we make the best effort we can at reading what is currently happening in the system, among all the possible race conditions that can occur, but that are don't cares for us since in the moment we got to read the status of that level, that was the epoch it was in. Thus, we just atomically read values without grabbing any rwlock.
         - **STORE FENCE**
         - Release senders rw_sem as reader.
         - For each of the 32 levels:
@@ -327,7 +327,7 @@ As requested, line-by-line status report. Located in /dev. Named */dev/aos_tag*.
 
 A generic userland thread becomes a writer/reader through these device files.
 What about *IPC_PRIVATE*? Which routines would need to be called?
-Develop the baseline version first, then make sure it is doable and discuss it with Quaglia to avoid conflicts with the specification. Could be a nice addition. Might require a different device driver, or an extension of that using the minor number. Or, it might be *ioctl*-based.
+Develop the baseline version first, then make sure it is doable and discuss it with Quaglia to avoid conflicts with the specification. Could be a nice addition. Might require an extension of the original driver using the minor number. Might be *ioctl*-based.
 
 # SYNCHRONIZATION
 
@@ -353,7 +353,7 @@ Things are a little bit different when *adding* an instance: at first, the bitma
 
 Also, threads that come from the VFS while doing an *open* must synchronize with *adders* and *removers* to take a snapshot of each instance before it fades away. This can be accomplished by locking the senders rw_sem and checking the instance pointer. Using the receivers one causes a false positive for removers that want to check if no reader is there, this way they'd only have to wait for the snapshot to be taken since these threads deterministically release this rw_sem shortly after.
 
-You may have noticed from the pseudocode above that when each of these two rw_sems gets locked *as writer*, the interruptible variant of the API is used. This is intended because since any thread can request access to any tag entry in the instance array, independently of the instance effectively being active or not and of permissions allowing the following operations on it, there could be some activity on an instance. In the unfortunate (and unlikely, under normal usage) case that such activity is extensive and the call that requires the rw_sems as writer blocks for too much time, it can be aborted with a signal.
+You may have noticed from the pseudocode above that when each of these two rw_sems gets locked *as writer*, the interruptible variant of the API is used. This is intended because since any thread can request access to any tag entry in the instance array, independently of the instance effectively being active or not and of permissions allowing the following operations on it, there could be some activity on an instance. In the unfortunate (and unlikely, under normal usage) case that such activity is extensive and the call that locks the rw_sems as writer blocks for too much time, it can be aborted with a signal. This is not true for *reader locking* since instance addition and removal are performed very quickly (under normal system load at least).
 
 ## POSTING A MESSAGE ON A LEVEL
 
@@ -365,7 +365,7 @@ The wakeup condition is a particular epoch-based struct. When the epoch selector
 
 Writers wait for all readers that got a condition value, i.e. they busy-wait on the "old" presence counter to become zero. This represents RCU's grace period. For receivers, reading the current condition value at first, before atomically incrementing the presence counter, is very important to sync with the state, avoid deadlocks and be waited by the very next writer.
 
-Full instance wakeups work in a similar fashion, as is clear from the pseudocode above.
+Full instance wakeups work in a similar fashion, as is clear from the pseudocode above. The only difference is that the wakeup is performed on both queues for each level since we can't know, nor should we care about, in which epoch each level is, thus in which queue each thread from the current instance-global epoch is found.
 
 # TODO LIST
 
