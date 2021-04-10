@@ -35,7 +35,7 @@ Brainstorming table for whatever needs to be discussed before the coding starts.
     - Set the instance struct pointer to *NULL*.
     - Initialize the rw_sems.
 - Register the device driver.
-- Create the VFS node in */dev* (see [here]()).
+- Create the VFS node in */dev* (see [here](https://stackoverflow.com/questions/49350553/can-i-call-mknod-from-my-kernel-module)). See below for the name.
 - Hack the system call table and install the new calls.
     This is the most critical and hazardous step so we do it now, when it's almost sure we got this.
 
@@ -350,8 +350,6 @@ Nop.
 # DEVICE FILE(s)
 
 A char device driver is required for these, maybe more than one or some minor-based behaviour.
-
-To create a device file in */dev* inside *init_module* specifying your device driver have a look at [this](https://stackoverflow.com/questions/49350553/can-i-call-mknod-from-my-kernel-module).
 
 ## STATUS
 As requested, line-by-line status report. Located in /dev. Named */dev/aos_tag*.
