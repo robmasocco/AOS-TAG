@@ -121,9 +121,9 @@ Returns 0 if the message was correctly sent, or -1 and *errno* is set to indicat
 - Set message size.
 - Set the now "old" level condition to 0x1.
 - **STORE FENCE** (One can never be too sure.)
-- While the old *epoch presence counter* doesn't become zero:
-    - Wake up the instance wait queue (use *wake_up(...)*).
-        This avoids some really bad race conditions.
+- Wake up the level wait queue (use *wake_up_all(...)*).
+    Note that the APIs used prevent the "Lost wake-up problem".
+- Busy-wait on the old epoch presence counter to become zero.
 - Reset the old level condition to 0x0.
 - Set size to 0.
 - **STORE FENCE**
@@ -157,9 +157,10 @@ Returns 0 if the requested operation was completed successfully, or -1 and *errn
     - Release instance condition rwlock as writer (as above).
     - Set the now "old" global condition to 0x1.
     - **STORE FENCE** (One can never be too sure.)
-    - While the old *global epoch presence counter* doesn't become zero:
-        - Wake up the instance wait queue (use *wake_up(...)*).
-            This avoids some really bad race conditions.
+    - For each level in the instance:
+        - Wake up the level wait queue (use *wake_up_all(...)*).
+            Note that the APIs used prevent the "Lost wake-up problem".
+    - Busy-wait on old global epoch presence counter to become zero.
     - Reset the old instance condition to 0x0.
     - **STORE FENCE**
     - Release instance awake_all mutex.
@@ -213,10 +214,10 @@ Each entry holds:
     - char * pointers to message buffers.
     - size_t sizes of the messages stored.
     - Mutexes to mutually exclude senders on each level.
+    - Wait queues.
     - Level conditions structs.
 - Creator EUID.
 - Protection-enabled binary flag. Set by *tag_get* upon instance creation, enables permissions checks for subsequent operations.
-- Instance-global wait queue.
 - Mutex to mutually exclude threads that execute an *AWAKE_ALL*.
 - Instance-global condition struct.
 
@@ -350,17 +351,21 @@ Also, threads that come from the VFS while doing an *open* must synchronize with
 
 ## POSTING A MESSAGE ON A LEVEL
 
+The algorithm described here is a variation of the algorithm used in RCU linked lists.
+
 The writer posts a message in the level buffer (together with its size), updates the wakeup condition, then wakes readers up. Kernel-side arrays are dynamically allocated to allow for messages greater than two pages (8 MB). Considering also the *copy_\** APIs, it won't be quick, but it won't waste any memory and use only what is necessary at any given time.
 
-The wakeup condition is a particular epoch-based struct: it implements a variation of the algorithm used in RCU linked lists. When the epoch selector gets flipped, that's a linearization point for the message buffer: all receiver threads that got in there before this will get the message, others were too late. The only difference is the need for an rwlock to avoid that the epoch selector gets flipped before a receiver can atomically increment the corresponding epoch presence counter: this is required here because if not, there could be some unlikely but dangerous race conditions that would lead to a receiver registering to an epoch that is *two times ahead* the one that it believes to be in, thus behaving incorrectly and skipping a message that it should get.
+The wakeup condition is a particular epoch-based struct. When the epoch selector gets flipped, that's a linearization point for the message buffer: all receiver threads that got in there before this will get the message, others were too late. The only difference is the need for an rwlock to avoid that the epoch selector gets flipped before a receiver can atomically increment the corresponding epoch presence counter: this is required here because if not, there could be some unlikely but dangerous race conditions that would lead to a receiver registering to an epoch that is *two times ahead* the one that it believes to be in, thus behaving incorrectly and skipping a message that it should get.
 
-Writers wait for all readers that got a condition value, i.e. they busy-wait on the "old" presence counter to become zero. This allows for some degree of concurrency and, knowing the wait queues APIs check the condition before going to sleep, helps to prevent that a reader that didn't see the condition update and didn't get in the wait queue before the wake_up got done will be eventually awoken. Reading the current condition value at first, before atomically incrementing the presence counter, is very important to sync with the state, avoid deadlocks and be waited by the very next writer.
+Writers wait for all readers that got a condition value, i.e. they busy-wait on the "old" presence counter to become zero. This allows for some degree of concurrency and represents the RCU's grace period. Reading the current condition value at first, before atomically incrementing the presence counter, is very important to sync with the state, avoid deadlocks and be waited by the very next writer.
 
 # TODO LIST
 
+- When dealing with atomic counters, use the *relaxed* memory order since we don't care about particular ordering of those instructions, only that they get executed atomically.
 - Signals, interrupts, preemption and the like checks against deadlocks and similar problems. Remember that wait queues functions return *-ERESTARTSYS* when a signal was delivered. See our little golden screenshot from our course materials to know how signals work (and remember: they're usermode shit, you just return -EINTR).
 - Anything still marked as TODO here.
 - Load and unload scripts, that handle *insmod*, *rmmod* and possibly compilation accordingly.
+- Remember that we removed the wake-up loop. Check if that is necessary if there's any trouble with wake-ups.
 
 # EXTRAS
 
