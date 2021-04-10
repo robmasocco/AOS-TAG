@@ -44,9 +44,9 @@ Returns the tag descriptor (array index) of the new instance, or -1 and *errno* 
     - If key is not *IPC_PRIVATE*:
         - Acquire the tree rw_sem as writer.
         - Look for the key in the tree, exit if found. Note that doing things like this is the only way to prevent adding multiple instances of the same key.
-    - Acquire bitmask spinlock (allowing IRQs).
+    - Acquire bitmask spinlock.
     - Linearly scan the bitmask to find a free entry in the array, then add it to the set and save the index.
-    - Release bitmask spinlock (as above).
+    - Release bitmask spinlock.
     - Allocate and accordingly initialize a new instance struct.
     - Acquire both instance rw_sems as writer (interruptible).
     - Set the instance struct pointer to the new struct's address.
@@ -70,16 +70,16 @@ Returns 0 if the message was read, or -1 and *errno* is set to indicate the caus
 - Lock receivers's rw_sem as reader.
 - Check instance pointer, eventually exit.
 - Check permissions if required (flag), eventually exit.
-- Acquire level condition rwlock as reader (allowing IRQs).
+- Acquire level condition rwlock as reader.
 - Atomically read the current *condition selector* from the level condition struct.
 - Atomically increment the current *epoch presence counter* in the level condition struct.
 - **MEMORY FENCE**
-- Release level condition rwlock as reader (as above).
-- Acquire instance condition rwlock as reader (allowing IRQs).
+- Release level condition rwlock as reader.
+- Acquire instance condition rwlock as reader.
 - Atomically read the current *global condition selector* from the instance condition struct.
 - Atomically increment the current *global epoch presence counter* in the instance condition struct.
 - **MEMORY FENCE**
-- Release instance condition rwlock as reader (as above).
+- Release instance condition rwlock as reader.
 - Wait on the current epoch's level queue (with *wait_event_interruptible(...)*) with (*curr_condition || curr_globl_condition*). Catch signals here and be very careful about which locks to release and counters to atomically decrement upon exit!!!
 - If *curr_globl_condition == True* we've been awoken:
     - Atomically decrement both global and level epoch presence counter.
@@ -115,11 +115,11 @@ Returns 0 if the message was correctly sent, or -1 and *errno* is set to indicat
 - *copy_from_user* into the new message buffer.
     This is slow, might block and might not be necessary if no one's there to get it, but we do it without acquiring any level-related lock first since it's the only thing senders can do independently of each other when on a same level. Wasting momentarily a bit of time and memory is a fair risk to take.
 - Acquire level senders mutex.
-- Acquire level condition rwlock as writer (allowing IRQs).
+- Acquire level condition rwlock as writer.
 - Atomically read and flip the current *condition selector* from the level condition struct. This is the linearization point for the message buffer. Save the previous value.
 - Reset the new condition value to 0x0.
 - **MEMORY FENCE**
-- Release level condition rwlock as writer (as above).
+- Release level condition rwlock as writer.
 - Atomically read the current *epoch presence counter* from the level condition struct: exit if it is zero (no one is waiting for a message on this level, so discard yours). Remember to free the buffer!
 - Set the level message pointer to the new buffer.
 - Set message size.
@@ -156,11 +156,11 @@ Returns 0 if the requested operation was completed successfully, or -1 and *errn
     - Check instance pointer, eventually exit.
     - Check permissions if required (flag), eventually exit.
     - Acquire instance awake_all mutex.
-    - Acquire instance condition rwlock as writer (allowing IRQs).
+    - Acquire instance condition rwlock as writer.
     - Atomically read and flip the current *condition selector* from the instance condition struct. Save the previous value.
     - Reset the new condition value to 0x0.
     - **MEMORY FENCE**
-    - Release instance condition rwlock as writer (as above).
+    - Release instance condition rwlock as writer.
     - Set the now "old" global condition to 0x1.
     - **STORE FENCE** (One can never be too sure.)
     - For each level in the instance:
@@ -183,9 +183,9 @@ Returns 0 if the requested operation was completed successfully, or -1 and *errn
         - Acquire the tree rw_sem as writer.
         - Remove the entry from the tree.
         - Release the tree rw_sem as writer.
-    - Acquire bitmask spinlock (allowing IRQs).
+    - Acquire bitmask spinlock.
     - Remove the tag descriptor from the bitmask.
-    - Release bitmask spinlock (as above).
+    - Release bitmask spinlock.
     - Set creator EUID to zero (for security), then *kfree* instance struct.
 - *module_put*
 - Return.
@@ -332,6 +332,11 @@ Develop the baseline version first, then make sure it is doable and discuss it w
 # SYNCHRONIZATION
 
 **At first, each operation should be protected with a *try_module_get/module_put* pair, the very first and last instructions of each system call, to ensure that the data structures we're about to access don't magically fade away whilst we're operating on them. Yes, there could still be race conditions, but you'd have to intentionally break the system to make them happen.**
+
+Synchronization is based on a light use of both:
+
+- Sleeping locks, in the form of mutexes and rw_semaphores. The last ones are used primarily as presence counters, with the ability to exclude threads when needed without holding CPUs.
+- Spinning locks, in the form of spinlocks and rwlocks, to guard status-critical data structures. Critical sections involving these have been kept as small and quick as possible, and are meant to be executed ASAP, so IRQs are usually not allowed.
 
 ## ACCESS TO THE BST-DICTIONARY
 
