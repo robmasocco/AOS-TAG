@@ -333,7 +333,7 @@ Develop the baseline version first, then make sure it is doable and discuss it w
 
 **At first, each operation should be protected with a *try_module_get/module_put* pair, the very first and last instructions of each system call, to ensure that the data structures we're about to access don't magically fade away whilst we're operating on them. Yes, there could still be race conditions, but you'd have to intentionally break the system to make them happen.**
 
-Synchronization is based on a light use of both:
+Each synchronization scheme implemented is based on a light use of both:
 
 - Sleeping locks, in the form of mutexes and rw_semaphores. The last ones are used primarily as presence counters, with the ability to exclude threads when needed without holding CPUs.
 - Spinning locks, in the form of spinlocks and rwlocks, to guard status-critical data structures. Critical sections involving these have been kept as small and quick as possible, and are meant to be executed ASAP, so IRQs are usually not allowed.
