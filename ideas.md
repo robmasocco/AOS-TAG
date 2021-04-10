@@ -46,7 +46,7 @@ Returns the tag descriptor (array index) of the new instance, or -1 and *errno* 
     - Linearly scan the bitmask to find a free entry in the array, then add it to the set and save the index.
     - Release bitmask spinlock (as above).
     - Allocate and accordingly initialize a new instance struct.
-    - Acquire both instance rw_sems as writer.
+    - Acquire both instance rw_sems as writer (interruptible).
     - Set the instance struct pointer to the new struct's address.
     - Release both instance rw_sems as writer.
     - If key is not *IPC_PRIVATE*:
@@ -65,7 +65,7 @@ Returns 0 if the message was read, or -1 and *errno* is set to indicate the caus
 
 - *try_module_get*
 - Consistency checks on input arguments.
-- Lock receivers's rw_sem as reader (use the *_interruptible* variant here).
+- Lock receivers's rw_sem as reader.
 - Check instance pointer, eventually exit.
 - Check permissions if required (flag), eventually exit.
 - Acquire level condition rwlock as reader (allowing IRQs).
@@ -168,10 +168,11 @@ Returns 0 if the requested operation was completed successfully, or -1 and *errn
     - Release senders's rw_sem as reader.
 - If *command* is *REMOVE*:
     - Trylock receivers rw_sem as writer, exit if this fails since at least a reader is there.
-    - Lock senders rw_sem as writer.
+    - Lock senders rw_sem as writer (interruptible).
     - Check instance pointer, eventually exit.
     - Check permissions if required (flag), eventually exit.
     - Save instance struct pointer and set it to *NULL*.
+    - **MEMORY FENCE**
     - Release senders rw_sem as writer.
     - Release receivers rw_sem as writer.
     - Check the key, if it is not *IPC_PRIVATE*:
@@ -328,8 +329,6 @@ Develop the baseline version first, then make sure it is doable and discuss it w
 
 **At first, each operation should be protected with a *try_module_get/module_put* pair, the very first and last instructions of each system call, to ensure that the data structures we're about to access don't magically fade away whilst we're operating on them. Yes, there could still be race conditions, but you'd have to intentionally break the system to make them happen.**
 
-Don't use the *_interruptible* variants of rw_semaphores's APIs unless otherwise specified, so signals won't kick our butt.
-
 ## ACCESS TO THE BST-DICTIONARY
 
 There's just an rw_semaphore to acquire and release: as a reader when making a query, as a writer when cutting an instance out or adding one. It is embedded into the data structure and its usage is part of the normal operations.
@@ -338,7 +337,7 @@ There's just an rw_semaphore to acquire and release: as a reader when making a q
 
 There are 4 kinds of threads: *receivers*, *senders*, *removers*, *adders*.
 
-Keep in mind that senders and removers always return, never deadlock, so their critical section time is always constant. Each entry in the array holds two rw_semaphores and a pointer. Remember that *lock* and *unlock* are called *down* and *up* for semaphores. The first rw_sem is for receivers as readers, the second is for senders as readers, both are for removers as writers.
+Keep in mind that senders and removers always return, never deadlock, so their critical section time is always constant or at least finite. Each entry in the array holds two rw_semaphores and a pointer. Remember that *lock* and *unlock* are called *down* and *up* for semaphores. The first rw_sem is for receivers as readers, the second is for senders as readers, both are for removers as writers.
 
 When a remover comes, it trylocks the receivers's one as a writer, then **eventually** locks the senders's one as a writer, then flips the instance pointer to NULL, releases both locks and does its thing **afterwards** for the sake of speed. Note that the first trylock could mean either that the instance is really there but there's at least one reader in it, or that the instance isn't there because it is being removed or created, so nothing to do either way.
 
@@ -350,6 +349,8 @@ Things are a little bit different when *adding* an instance: at first, the bitma
 
 Also, threads that come from the VFS while doing an *open* must synchronize with *adders* and *removers* to take a snapshot of each instance before it fades away. This can be accomplished by locking the senders rw_sem and checking the instance pointer. Using the receivers one causes a false positive for removers that want to check if no reader is there, this way they'd only have to wait for the snapshot to be taken since these threads deterministically release this rw_sem shortly after.
 
+You may have noticed from the pseudocode above that when each of these two rw_sems gets locked *as writer*, the interruptible variant of the API is used. This is intended because since any thread can request access to any tag entry in the instance array, independently of the instance effectively being active or not and of permissions allowing the following operations on it, there could be some activity on an instance. In the unfortunate (and unlikely, under normal usage) case that such activity is extensive and the call that requires the rw_sems as writer blocks for too much time, it can be aborted with a signal.
+
 ## POSTING A MESSAGE ON A LEVEL
 
 The algorithm described here is a variation of the algorithm used in RCU linked lists.
@@ -358,7 +359,9 @@ The writer posts a message in the level buffer (together with its size), updates
 
 The wakeup condition is a particular epoch-based struct. When the epoch selector gets flipped, that's a linearization point for the message buffer: all receiver threads that got in there before this will get the message, others were too late. The only difference is the need for an rwlock to avoid that the epoch selector gets flipped before a receiver can atomically increment the corresponding epoch presence counter: this is required here because if not, there could be some unlikely but dangerous race conditions that would lead to a receiver registering to an epoch that is *two times ahead* the one that it believes to be in, thus behaving incorrectly and skipping a message that it should get.
 
-Writers wait for all readers that got a condition value, i.e. they busy-wait on the "old" presence counter to become zero. This represents the RCU's grace period. For receivers, reading the current condition value at first, before atomically incrementing the presence counter, is very important to sync with the state, avoid deadlocks and be waited by the very next writer.
+Writers wait for all readers that got a condition value, i.e. they busy-wait on the "old" presence counter to become zero. This represents RCU's grace period. For receivers, reading the current condition value at first, before atomically incrementing the presence counter, is very important to sync with the state, avoid deadlocks and be waited by the very next writer.
+
+Full instance wakeups work in a similar fashion, as is clear from the pseudocode above.
 
 # TODO LIST
 
