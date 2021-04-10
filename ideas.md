@@ -22,6 +22,39 @@ Brainstorming table for whatever needs to be discussed before the coding starts.
 - Splay trees might be a good idea, using join-based alternative for deletion (to avoid splaying the predecessor to the top)
     and make nodes (structures) cache-aligned (in GCC: "struct ... {...} ... \__attribute__ ((aligned (L1_CACHE_BYTES)));"). See [here](https://en.wikipedia.org/wiki/Splay_tree).
 
+## MODULE MANAGEMENT ROUTINES
+
+### *init_module*
+
+- Consistency checks on parameters values, against their default values where appropriate.
+- *find_module* on the SCTH module.
+- *try_module_get* on the SCTH module.
+- Create the BST dictionary.
+- *kmalloc* memory for the instance array.
+- For each entry in the instance array:
+    - Set the instance struct pointer to *NULL*.
+    - Initialize the rw_sems.
+- Register the device driver.
+- Create the VFS node in */dev* (see [here]()).
+- Hack the system call table and install the new calls.
+    This is the most critical and hazardous step so we do it now, when it's almost sure we got this.
+
+If any of the aforementioned steps fails, the routine should terminate releasing all resources, with an appropriate error code.
+
+### *cleanup_module*
+
+- Unhack the system call table.
+    Being this the most important thing, we do it immediately.
+- *module_put* on the SCTH module.
+- Remove the VFS node in */dev*.
+- Unregister the device driver.
+- For each entry in the instance array:
+    - If the pointer is not *NULL*, *kfree* it.
+- *kfree* the instance array.
+- Remove the BST dictionary.
+
+Each of the aforementioned steps must at least be attempted, in order to remove as many resources as possible. If at the end some failed, an error code should be returned.
+
 # OPERATIONS DETAILS
 
 The following pseudocode describes how all operations are performed, and contains some hints about why some choices were made about synchronization and other similar issues.
