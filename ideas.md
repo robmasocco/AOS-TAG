@@ -109,14 +109,16 @@ Returns 0 if the message was correctly sent, or -1 and *errno* is set to indicat
 - Lock senders's rw_sem as reader.
 - Check instance pointer, eventually exit.
 - Check permissions if required (flag), eventually exit.
-- Acquire level writers mutex.
+- *kmalloc* a properly-sized message buffer.
+- *copy_from_user* into the new message buffer.
+    This is slow, might block and might not be necessary if no one's there to get it, but we do it without acquiring any level-related lock first since it's the only thing senders can do independently of each other when on a same level. Wasting momentarily a bit of time and memory is a fair risk to take.
+- Acquire level senders mutex.
 - Acquire level condition rwlock as writer (allowing IRQs).
 - Atomically read and flip the current *condition selector* from the level condition struct. This is the linearization point for the message buffer. Save the previous value.
+- Reset the new condition value to 0x0.
 - **MEMORY FENCE**
 - Release level condition rwlock as writer (as above).
-- Atomically read the current *epoch presence counter* from the level condition struct: exit if it is zero (no one is waiting for a message on this level, so discard yours).
-- *kmalloc* a properly-sized message buffer.
-- *copy_from_user* into the new message buffer. This is slow, might block and all, but we want to do it only if necessary, so if we need to discard the message we don't waste any memory and time doing it, we just exit as above.
+- Atomically read the current *epoch presence counter* from the level condition struct: exit if it is zero (no one is waiting for a message on this level, so discard yours). Remember to free the buffer!
 - Set the level message pointer to the new buffer.
 - Set message size.
 - Set the now "old" level condition to 0x1.
@@ -124,12 +126,11 @@ Returns 0 if the message was correctly sent, or -1 and *errno* is set to indicat
 - Wake up the level wait queue (use *wake_up_all(...)*).
     Note that the APIs used prevent the "Lost wake-up problem".
 - Busy-wait on the old epoch presence counter to become zero.
-- Reset the old level condition to 0x0.
-- Set size to 0.
+- Set message size to 0 and buffer pointer to NULL (all registered receivers read it at this point). Save it to *kfree* it in a bit.
 - **STORE FENCE**
-- *kfree* the message buffer (all registered receivers read it at this point).
-- Release level writers mutex.
+- Release level senders mutex.
 - Release senders's rw_sem as reader.
+- *kfree* the message buffer.
 - *module_put*
 - Return.
 
@@ -154,6 +155,8 @@ Returns 0 if the requested operation was completed successfully, or -1 and *errn
     - Acquire instance awake_all mutex.
     - Acquire instance condition rwlock as writer (allowing IRQs).
     - Atomically read and flip the current *condition selector* from the instance condition struct. Save the previous value.
+    - Reset the new condition value to 0x0.
+    - **MEMORY FENCE**
     - Release instance condition rwlock as writer (as above).
     - Set the now "old" global condition to 0x1.
     - **STORE FENCE** (One can never be too sure.)
@@ -161,8 +164,6 @@ Returns 0 if the requested operation was completed successfully, or -1 and *errn
         - Wake up the level wait queue (use *wake_up_all(...)*).
             Note that the APIs used prevent the "Lost wake-up problem".
     - Busy-wait on old global epoch presence counter to become zero.
-    - Reset the old instance condition to 0x0.
-    - **STORE FENCE**
     - Release instance awake_all mutex.
     - Release senders's rw_sem as reader.
 - If *command* is *REMOVE*:
@@ -353,11 +354,11 @@ Also, threads that come from the VFS while doing an *open* must synchronize with
 
 The algorithm described here is a variation of the algorithm used in RCU linked lists.
 
-The writer posts a message in the level buffer (together with its size), updates the wakeup condition, then wakes readers up. Kernel-side arrays are dynamically allocated to allow for messages greater than two pages (8 MB). Considering also the *copy_\** APIs, it won't be quick, but it won't waste any memory and use only what is necessary at any given time.
+The writer posts a message in the level buffer (together with its size), updates the wakeup condition, then wakes readers up. Kernel-side buffers are dynamically allocated to allow for messages greater than two pages (8 MB) if required (i.e. temporarily saving the message to post in the stack it's not a great idea). Considering also the *copy_\** APIs, it won't be quick, but it won't waste any memory and use only what is necessary at any given time. Also, as for RCU, only one writer is allowed to change the epoch at any given time and then free the message buffer after the grace period, but given the nature of this system a sleeping lock, i.e. a mutex, is used instead of a spinlock.
 
 The wakeup condition is a particular epoch-based struct. When the epoch selector gets flipped, that's a linearization point for the message buffer: all receiver threads that got in there before this will get the message, others were too late. The only difference is the need for an rwlock to avoid that the epoch selector gets flipped before a receiver can atomically increment the corresponding epoch presence counter: this is required here because if not, there could be some unlikely but dangerous race conditions that would lead to a receiver registering to an epoch that is *two times ahead* the one that it believes to be in, thus behaving incorrectly and skipping a message that it should get.
 
-Writers wait for all readers that got a condition value, i.e. they busy-wait on the "old" presence counter to become zero. This allows for some degree of concurrency and represents the RCU's grace period. Reading the current condition value at first, before atomically incrementing the presence counter, is very important to sync with the state, avoid deadlocks and be waited by the very next writer.
+Writers wait for all readers that got a condition value, i.e. they busy-wait on the "old" presence counter to become zero. This represents the RCU's grace period. For receivers, reading the current condition value at first, before atomically incrementing the presence counter, is very important to sync with the state, avoid deadlocks and be waited by the very next writer.
 
 # TODO LIST
 
