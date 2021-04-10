@@ -24,6 +24,8 @@ Brainstorming table for whatever needs to be discussed before the coding starts.
 
 # OPERATIONS DETAILS
 
+The following pseudocode describes how all operations are performed, and contains some hints about why some choices were made about synchronization and other similar issues.
+
 ## *int tag_get(int key, int command, int permission)*
 
 Opens a new instance of the service. You can open whatever instance you want but if permissions aren't ok for you then **all subsequent *receives* and *sends* will fail**. This behavior is intended since tag descriptors don't really mean much, i.e. we need to check for them in *receive* and *send* that could be called on a different instance than the one originally intended if someone called a *REMOVE* in the meantime, so it doesn't make much sense to also check them here.
@@ -125,6 +127,7 @@ Returns 0 if the message was correctly sent, or -1 and *errno* is set to indicat
 - **STORE FENCE** (One can never be too sure.)
 - Wake up the level wait queue (use *wake_up_all(...)*).
     Note that the APIs used prevent the "Lost wake-up problem".
+    Also note that this call grabs the queue spinlock, wakes all readers that "got the message" in a single pass and then releases the queue spinlock. Could it try to also wake up some "new readers", i.e. threads that are waiting for the new epoch's condition but in the meantime went to sleep in here? Yes. It's a risk we take.
 - Busy-wait on the old epoch presence counter to become zero.
 - Set message size to 0 and buffer pointer to NULL (all registered receivers read it at this point). Save it to *kfree* it in a bit.
 - **STORE FENCE**
@@ -164,6 +167,7 @@ Returns 0 if the requested operation was completed successfully, or -1 and *errn
         - Wake up the level wait queue (use *wake_up_all(...)*).
             Note that the APIs used prevent the "Lost wake-up problem".
     - Busy-wait on old global epoch presence counter to become zero.
+        This still needs to happen because even if there's no buffer to read from, the threads that were awoken need to *consume the condition*, i.e. be able to check that it is verified before another awaker comes and resets it.
     - Release instance awake_all mutex.
     - Release senders's rw_sem as reader.
 - If *command* is *REMOVE*:
