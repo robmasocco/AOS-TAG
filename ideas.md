@@ -200,7 +200,7 @@ This dictionary holds *key-tag descriptor* pairs of the instances that were **NO
 
 - int key, the dictionary key.
 - int tag descriptor, index in the shared instances array.
-- A shitload of pointers to make the tree work as a linked structure.
+- Pointers to make the tree work as a linked structure.
 
 ## SHARED INSTANCES ARRAY
 
