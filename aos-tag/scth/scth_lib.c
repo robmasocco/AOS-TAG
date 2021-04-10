@@ -29,7 +29,7 @@
 
 #include "utils/x86_utils.h"
 #include "utils/paging_navigator.h"
-#include "scth.h"
+#include "include/scth.h"
 
 #define MODNAME "SCTH"
 

@@ -31,7 +31,7 @@
 #include <linux/errno.h>
 #include <linux/version.h>
 
-#include "scth.h"
+#include "include/scth.h"
 
 #define MODNAME "SCTH"
 
