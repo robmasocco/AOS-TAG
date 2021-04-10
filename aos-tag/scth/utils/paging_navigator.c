@@ -16,6 +16,7 @@
 /* 
  * @brief Source code for the "page_navigator" routine.
  *        See related header file.
+ *        Rewritten along the lines of "VTPMO" while studying paging.
  * 
  * @author Roberto Masocco
  * 

@@ -18,6 +18,7 @@
  *        Tells if a paged virtual address is mapped on a physical frame, and
  *        in case returns the corresponding physical frame number.
  *        Works on x86-64 machines in long mode with 4-level paging.
+ *        Rewritten along the lines of "VTPMO" while studying paging.
  * 
  * @author Roberto Masocco
  * 
