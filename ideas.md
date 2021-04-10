@@ -369,7 +369,7 @@ Develop the baseline version first, then make sure it is doable and discuss it w
 Each synchronization scheme implemented is based on a light use of both:
 
 - Sleeping locks, in the form of mutexes and rw_semaphores. The last ones are used primarily as presence counters, with the ability to exclude threads when needed without holding CPUs.
-- Spinning locks, in the form of spinlocks and rwlocks, to guard status-critical data structures. Critical sections involving these have been kept as small and quick as possible, and are meant to be executed ASAP, so IRQs are usually not allowed.
+- Spinning locks, in the form of spinlocks and rwlocks, to guard status-critical data structures. Critical sections involving these have been kept as small and quick as possible, and are meant to be executed ASAP, so we'd like some speed also while locking. But we're not coding interrupt handlers, so we don't need the additional overhead that comes when blocking IRQs, which is why we use only the basic APIs.
 
 ## ACCESS TO THE BST-DICTIONARY
 
