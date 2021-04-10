@@ -21,7 +21,7 @@
  * @date April 3, 2021
  */
 /* 
- + NOTE: Usermode versions of these macros are intended for testing
+ * NOTE: Usermode versions of these macros are intended for testing
  *       purposes only.
  */
 
