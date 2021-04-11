@@ -42,14 +42,14 @@ typedef struct _tag_cond_t {
  *
  * @param cond_addr Address of the tag_cond to initialize.
  */
-#define TAG_COND_INIT(cond_addr)                \
-    do {                                        \
-        cond_addr->_cond_epoch = 0;             \
-        cond_addr->_conditions[0] = 0;          \
-        cond_addr->_conditions[1] = 0;          \
-        cond_addr->_pres_count[0] = 0;          \
-        cond_addr->_pres_count[1] = 0;          \
-        spin_lock_init(&(cond_addr->_lock));    \
+#define TAG_COND_INIT(cond_addr)                  \
+    do {                                          \
+        (cond_addr)->_cond_epoch = 0;             \
+        (cond_addr)->_conditions[0] = 0;          \
+        (cond_addr)->_conditions[1] = 0;          \
+        (cond_addr)->_pres_count[0] = 0;          \
+        (cond_addr)->_pres_count[1] = 0;          \
+        spin_lock_init(&((cond_addr)->_lock));    \
     } while (0)
 
 /**
@@ -62,14 +62,14 @@ typedef struct _tag_cond_t {
  * @param cond_addr Address of the tag_cond to register on.
  * @return Current epoch's selector.
  */
-#define TAG_COND_REG(cond_addr) ({                              \
-    unsigned char __epoch_sel;                                  \
-    spin_lock(&(cond_addr->_lock));                             \
-    __epoch_sel = cond_addr->_cond_epoch;                       \
-    __atomic_add_fetch(&(cond_addr->_pres_count[__epoch_sel]),  \
-        1, __ATOMIC_RELAXED);                                   \
-    asm volatile ("mfence" ::: "memory");                       \
-    spin_unlock(&(cond_addr->_lock));                           \
+#define TAG_COND_REG(cond_addr) ({                                \
+    unsigned char __epoch_sel;                                    \
+    spin_lock(&((cond_addr)->_lock));                             \
+    __epoch_sel = (cond_addr)->_cond_epoch;                       \
+    __atomic_add_fetch(&((cond_addr)->_pres_count[__epoch_sel]),  \
+        1, __ATOMIC_RELAXED);                                     \
+    asm volatile ("mfence" ::: "memory");                         \
+    spin_unlock(&((cond_addr)->_lock));                           \
     __epoch_sel; })
 
 /**
@@ -79,8 +79,8 @@ typedef struct _tag_cond_t {
  * @param cond_addr Address of the tag_cond to operate on.
  * @param epoch Epoch selector of the epoch to unregister from.
  */
-#define TAG_COND_UNREG(cond_addr, epoch)                   \
-    __atomic_sub_fetch(&(cond_addr->_pres_count[epoch]),   \
+#define TAG_COND_UNREG(cond_addr, epoch)                     \
+    __atomic_sub_fetch(&((cond_addr)->_pres_count[epoch]),   \
         1, __ATOMIC_RELAXED);
 
 /**
@@ -90,15 +90,15 @@ typedef struct _tag_cond_t {
  * @param cond_addr Address of the tag_cond to operate on.
  * @return Epoch selector of the now "old" epoch.
  */
-#define TAG_COND_FLIP(cond_addr) ({             \
-    unsigned char __last_epoch, __new_epoch;    \
-    spin_lock(&(cond_addr->_lock));             \
-    __last_epoch = cond_addr->_cond_epoch;      \
-    __new_epoch = __last_epoch ^ 0x1;           \
-    cond_addr->_cond_epoch = __new_epoch;       \
-    cond_addr->_conditions[__new_epoch] = 0x0;  \
-    asm volatile ("mfence" ::: "memory");       \
-    spin_unlock(&(cond_addr->_lock));           \
+#define TAG_COND_FLIP(cond_addr) ({               \
+    unsigned char __last_epoch, __new_epoch;      \
+    spin_lock(&((cond_addr)->_lock));             \
+    __last_epoch = (cond_addr)->_cond_epoch;      \
+    __new_epoch = __last_epoch ^ 0x1;             \
+    (cond_addr)->_cond_epoch = __new_epoch;       \
+    (cond_addr)->_conditions[__new_epoch] = 0x0;  \
+    asm volatile ("mfence" ::: "memory");         \
+    spin_unlock(&((cond_addr)->_lock));           \
     __last_epoch; })
 
 /**
@@ -110,4 +110,4 @@ typedef struct _tag_cond_t {
  * @param epoch Epoch selector of the condition to get.
  * @return Value of the specified condition, by direct evaluation.
  */
-#define TAG_COND_VAL(cond_addr, epoch) cond_addr->_conditions[epoch]
+#define TAG_COND_VAL(cond_addr, epoch) (cond_addr)->_conditions[epoch]
