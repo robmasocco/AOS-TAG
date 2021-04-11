@@ -30,6 +30,7 @@ Brainstorming table for whatever needs to be discussed before the coding starts.
 - *find_module* on the SCTH module.
 - *try_module_get* on the SCTH module.
 - Create the BST dictionary.
+- Create the tag bitmask.
 - *kmalloc* memory for the instance array.
 - For each entry in the instance array:
     - Set the instance struct pointer to *NULL*.
@@ -51,6 +52,7 @@ If any of the aforementioned steps fails, the routine should terminate releasing
 - For each entry in the instance array:
     - If the pointer is not *NULL*, *kfree* it.
 - *kfree* the instance array.
+- Remove the tag bitmask.
 - Remove the BST dictionary.
 
 Each of the aforementioned steps must at least be attempted, in order to remove as many resources as possible. If at the end some failed, an error code should be returned.
