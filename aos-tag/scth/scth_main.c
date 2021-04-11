@@ -1,4 +1,4 @@
-/* 
+/**
  * This is free software.
  * You can redistribute it and/or modify this file under the
  * terms of the GNU General Public License as published by the Free Software
@@ -13,7 +13,7 @@
  * this file; if not, write to the Free Software Foundation, Inc.,
  * 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA.
  */
-/*
+/**
  * @brief Main source file for the "System Call Table Hacker" kernel module.
  *        See other source files for more information.
  *
@@ -21,9 +21,9 @@
  *
  * @date March 8, 2021
  */
-/*
+/**
  * WARNING: Module locking is not explicitly dealt with here, you'll have to
- *          include it explicitly in your code.
+ *          include it in your code.
  */
 
 #include <linux/kernel.h>

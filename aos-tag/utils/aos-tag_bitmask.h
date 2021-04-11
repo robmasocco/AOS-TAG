@@ -1,4 +1,4 @@
-/* 
+/**
  * This is free software.
  * You can redistribute it and/or modify this file under the
  * terms of the GNU General Public License as published by the Free Software
@@ -13,14 +13,14 @@
  * this file; if not, write to the Free Software Foundation, Inc.,
  * 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA.
  */
-/*
+/**
  * @brief Set of macros to interact with the instance bitmask.
  *
  * @author Roberto Masocco
  *
  * @date April 3, 2021
  */
-/* 
+/**
  * NOTE: Usermode versions of these macros are intended for testing
  *       purposes only.
  */
@@ -42,7 +42,7 @@ typedef struct _tag_bitmask {
 #endif
 } tag_bitmask;
 
-/*
+/**
  * Creates a tag bitmask capable of holding the specified number of elements.
  *
  * @param nr_tags Number of valid bits to hold.
@@ -84,7 +84,7 @@ typedef struct _tag_bitmask {
     new_mask; })
 #endif
 
-/*
+/**
  * Removes a given tag bitmask, freeing memory.
  *
  * @param mask Tag mask to free.
@@ -103,10 +103,10 @@ typedef struct _tag_bitmask {
     } while (0)
 #endif
 
-/*
- * Sets a specific bit in the bitmask.
- * NOTE: No validity check on the index is performed!
- * WARNING: This routine does not acquire the mask lock, you'll have to do it
+/**
+ * Sets a specific bit in the bitmask. 
+ * NOTE: No validity check on the index is performed! 
+ * WARNING: This routine does not acquire the mask lock, you'll have to do it 
  *          manually prior to the call.
  *
  * @param tag_mask Address of the bitmask.
@@ -122,10 +122,10 @@ typedef struct _tag_bitmask {
         (tag_mask->_mask)[ulong_indx] = tag_ulong;                           \
     } while (0)
 
-/*
- * Clears a specific bit in the bitmask.
- * NOTE: No validity check on the index is performed!
- * WARNING: This routine acquires the mask lock.
+/**
+ * Clears a specific bit in the bitmask. 
+ * NOTE: No validity check on the index is performed! 
+ * WARNING: This routine acquires the mask lock. 
  *
  * @param tag_mask Address of the bitmask.
  * @param tag_desc Index of the bit to set.
@@ -154,11 +154,11 @@ typedef struct _tag_bitmask {
     } while (0)
 #endif
 
-/*
- * Returns the index of the first zero bit in the bitmask, or -1.
- * For the sake of speed, the bit is also set to 1.
- * NOTE: Validity check is performed here, since the mask length could
- *       exceed the number of valid positions in the array.
+/**
+ * Returns the index of the first zero bit in the bitmask, or -1. 
+ * For the sake of speed, the bit is also set to 1. 
+ * NOTE: Validity check is performed here, since the mask length could 
+ *       exceed the number of valid positions in the array. 
  * WARNING: This routine acquires the mask lock.
  *
  * @param tag_mask Address of the bitmask.

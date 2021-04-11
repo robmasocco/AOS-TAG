@@ -1,4 +1,4 @@
-/* 
+/**
  * This is free software.
  * You can redistribute it and/or modify this file under the
  * terms of the GNU General Public License as published by the Free Software
@@ -13,14 +13,14 @@
  * this file; if not, write to the Free Software Foundation, Inc.,
  * 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA.
  */
-/*
+/**
  * @brief Splay Tree data structure library source code.
  *
  * @author Roberto Masocco
  *
  * @date April 4, 2021
  */
-/*
+/**
  * This code is a kernel-side rework of my repository splay-trees_c.
  * It lacks many unnecessary things and does others differently.
  */
@@ -47,7 +47,7 @@ SplayIntNode *_spli_splay(SplayIntNode *node);
 SplayIntNode *_spli_join(SplayIntNode *left_root, SplayIntNode *right_root);
 
 // LIBRARY FUNCTIONS //
-/*
+/**
  * Creates a new Splay Tree.
  *
  * @return Pointer to the newly created tree, NULL if allocation failed.
@@ -62,8 +62,8 @@ SplayIntTree *create_splay_int_tree(void) {
     return new_tree;
 }
 
-/* 
- * Frees a given Splay Tree. Using options defined in the header,
+/**
+ * Frees a given Splay Tree. Using options defined in the header, 
  * it's possible to specify whether also data has to be freed or not.
  *
  * @param tree Pointer to the tree to free.
@@ -93,7 +93,7 @@ int delete_splay_int_tree(SplayIntTree *tree, int opts) {
     return 0;
 }
 
-/*
+/**
  * Searches for an entry with the specified key in the tree.
  *
  * @param tree Tree to search into.
@@ -111,7 +111,7 @@ void *splay_int_search(SplayIntTree *tree, int key, int opts) {
     return NULL;
 }
 
-/*
+/**
  * Deletes an entry from the tree.
  *
  * @param tree Pointer to the tree to delete from.
@@ -142,7 +142,7 @@ int splay_int_delete(SplayIntTree *tree, int key, int opts) {
     return 0;  // Not found.
 }
 
-/*
+/**
  * Creates and inserts a new node in the tree.
  *
  * @param tree Pointer to the tree to insert into.
@@ -183,17 +183,17 @@ ulong splay_int_insert(SplayIntTree *tree, int new_key, void *new_data) {
     return tree->nodes_count;  // Return the result of the insertion.
 }
 
-/*
- * Performs a breadth-first search of the tree, the type of which can be
- * specified using the options defined in the header (left or right son
- * visited first).
- * Depending on the option specified, returns an array of:
- * - Pointers to the nodes.
- * - Keys.
- * - Data.
- * See the header for the definitions of such options.
- * Remember to free the returned array afterwards!
- * NOTE: In this work, we'll use this function only to delete the whole tree,
+/**
+ * Performs a breadth-first search of the tree, the type of which can be 
+ * specified using the options defined in the header (left or right son 
+ * visited first). 
+ * Depending on the option specified, returns an array of: 
+ * - Pointers to the nodes. 
+ * - Keys. 
+ * - Data. 
+ * See the header for the definitions of such options. 
+ * Remember to free the returned array afterwards! 
+ * NOTE: In this work, we'll use this function only to delete the whole tree, 
  *       so some stuff from the original implementation is missing.
  * 
  * @param tree Pointer to the tree to operate on.
@@ -251,7 +251,7 @@ void **splay_int_bfs(SplayIntTree *tree, int type, int opts) {
 }
 
 // INTERNAL LIBRARY SUBROUTINES //
-/*
+/**
  * Creates a new node. Requires an integer key and some data.
  *
  * @param new_key Key to add.
@@ -270,7 +270,7 @@ SplayIntNode *_spli_create_node(int new_key, void *new_data) {
     return new_node;
 }
 
-/*
+/**
  * Frees memory occupied by a node.
  *
  * @param node Node to release.
@@ -279,8 +279,8 @@ void _spli_delete_node(SplayIntNode *node) {
     kfree(node);
 }
 
-/*
- * Inserts a subtree rooted in a given node as the left subtree of a given
+/**
+ * Inserts a subtree rooted in a given node as the left subtree of a given 
  * node.
  *
  * @param father Pointer to the node to root the subtree onto.
@@ -291,8 +291,8 @@ void _spli_insert_left_subtree(SplayIntNode *father, SplayIntNode *new_son) {
     father->_left_son = new_son;
 }
 
-/*
- * Inserts a subtree rooted in a given node as the right subtree of a given
+/**
+ * Inserts a subtree rooted in a given node as the right subtree of a given 
  * node.
  *
  * @param father Pointer to the node to root the subtree onto.
@@ -303,7 +303,7 @@ void _spli_insert_right_subtree(SplayIntNode *father, SplayIntNode *new_son) {
     father->_right_son = new_son;
 }
 
-/*
+/**
  * Cuts and returns the left subtree of a given node.
  *
  * @param father Node to cut the subtree at.
@@ -317,7 +317,7 @@ SplayIntNode *_spli_cut_left_subtree(SplayIntNode *father) {
     return son;
 }
 
-/*
+/**
  * Cuts and returns the right subtree of a given node.
  *
  * @param father Node to cut the subtree at.
@@ -331,7 +331,7 @@ SplayIntNode *_spli_cut_right_subtree(SplayIntNode *father) {
     return son;
 }
 
-/*
+/**
  * Returns the descendant of a given node with the greatest key.
  *
  * @param node Node for which to look for the descendant.
@@ -343,7 +343,7 @@ SplayIntNode *_spli_max_key_son(SplayIntNode *node) {
     return curr;
 }
 
-/*
+/**
  * Returns a pointer to the node with the specified key, or NULL.
  *
  * @param tree Pointer to the tree to look into.
@@ -365,7 +365,7 @@ SplayIntNode *_spli_search_node(SplayIntTree *tree, int key) {
     return NULL;
 }
 
-/*
+/**
  * Swaps contents between two nodes.
  *
  * @param node1 First node.
@@ -382,7 +382,7 @@ void _spli_swap_info(SplayIntNode *node1, SplayIntNode *node2) {
     node2->_data = data1;
 }
 
-/*
+/**
  * Performs a simple right rotation at the specified node.
  *
  * @param node Node to rotate onto.
@@ -404,7 +404,7 @@ void _spli_right_rotation(SplayIntNode *node) {
     _spli_insert_left_subtree(node, l_tree_l);
 }
 
-/*
+/**
  * Performs a simple left rotation at the specified node.
  *
  * @param node Node to rotate onto.
@@ -426,10 +426,10 @@ void _spli_left_rotation(SplayIntNode *node) {
     _spli_insert_right_subtree(node, r_tree_r);
 }
 
-/*
- * Performs a single splay step onto a given node.
- * Note that in order to fully splay a node, this has to be called until a node
- * becomes the tree's root.
+/**
+ * Performs a single splay step onto a given node. 
+ * Note that in order to fully splay a node, this has to be called until a 
+ * node becomes the tree's root.
  *
  * @param node Node to splay.
  * @return Pointer to the splayed node as it climbs up (content swaps!).
@@ -483,8 +483,8 @@ SplayIntNode *_spli_splay(SplayIntNode *node) {
     return new_curr_node;
 }
 
-/*
- * Upon deletion, joins two subtrees and returns the new root.
+/**
+ * Upon deletion, joins two subtrees and returns the new root. 
  *
  * @param left_root Pointer to the root node of the left subtree.
  * @param right_root Pointer to the root node of the right subtree.

@@ -1,4 +1,4 @@
-/* 
+/**
  * This is free software.
  * You can redistribute it and/or modify this file under the
  * terms of the GNU General Public License as published by the Free Software
@@ -13,7 +13,7 @@
  * this file; if not, write to the Free Software Foundation, Inc.,
  * 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA.
  */
-/* 
+/**
  * @brief Source code for the "page_navigator" routine.
  *        See related header file.
  *        Rewritten along the lines of "VTPMO" while studying paging.
@@ -49,8 +49,8 @@
 #define PDE(vaddr)  ((unsigned long long)(vaddr >> 21) & 0x1ffULL)
 #define PTE(vaddr)  ((unsigned long long)(vaddr >> 12) & 0x1ffULL)
 
-/* 
- * This routine traverses the page table to check if a given virtual address
+/**
+ * This routine traverses the page table to check if a given virtual address 
  * is mapped onto some physical frame.
  * Helps to prevent General Protection Errors.
  * 

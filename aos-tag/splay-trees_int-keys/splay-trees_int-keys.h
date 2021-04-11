@@ -1,4 +1,4 @@
-/* 
+/**
  * This is free software.
  * You can redistribute it and/or modify this file under the
  * terms of the GNU General Public License as published by the Free Software
@@ -13,14 +13,14 @@
  * this file; if not, write to the Free Software Foundation, Inc.,
  * 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA.
  */
-/*
+/**
  * @brief Splay Tree data structure library header.
  *
  * @author Roberto Masocco
  *
  * @date April 4, 2021
  */
-/*
+/**
  * This file contains type definitions and declarations for the Splay Tree data
  * structure. See the source file for brief descriptions of what each function
  * does. Note that functions which names start with "_" are meant for internal
@@ -29,7 +29,7 @@
  * exposed methods require pointers or return some: see
  * the source file to understand what needs to be freed after use.
  */
-/*
+/**
  * This code is a kernel-side rework of my repository splay-trees_c.
  * It lacks many unnecessary things and does others differently.
  */
@@ -39,14 +39,14 @@
 
 typedef unsigned long int ulong;
 
-/* 
+/**
  * These options can be OR'd in a call to the delete functions to specify
  * if also the keys and/or the data in the nodes must be freed.
  * If nothing is specified, only the nodes are freed.
  */
 #define DELETE_FREE_DATA 0x1
 
-/*
+/**
  * These options can be specified to tell the search functions what data to
  * return from the trees.
  * Only one at a time is allowed.
@@ -54,19 +54,19 @@ typedef unsigned long int ulong;
 #define SEARCH_DATA 0x4
 #define SEARCH_NODES 0x10
 
-/*
+/**
  * These options can be used to specify the desired kind of breadth-first
  * search. Only one at a time is allowed.
  */
 #define BFS_LEFT_FIRST 0x100
 #define BFS_RIGHT_FIRST 0x200
 
-/*
+/**
  * x86 cache line size, in bytes.
  */
 #define X86_CACHE_LINE_SZ 64
 
-/* 
+/**
  * A Splay Tree's node stores pointers to its "father" node and to its sons.
  * Since we're using the "splay" heuristic, no balance information is stored.
  * In this implementation, integers are used as keys in the dictionary.
@@ -88,7 +88,7 @@ struct _splay_int_node {
 } __attrbute__ ((aligned (X86_CACHE_LINE_SZ)));
 typedef struct _splay_int_node SplayIntNode;
 
-/*
+/**
  * A Splay Tree stores a pointer to its root node and a counter which keeps
  * track of the number of nodes in the structure, to get an idea of its "size"
  * and be able to efficiently perform searches.

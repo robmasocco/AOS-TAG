@@ -1,4 +1,4 @@
-/* 
+/**
  * This is free software.
  * You can redistribute it and/or modify this file under the
  * terms of the GNU General Public License as published by the Free Software
@@ -13,7 +13,7 @@
  * this file; if not, write to the Free Software Foundation, Inc.,
  * 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA.
  */
-/*
+/**
  * @brief Source file for the "System Call Table Hacker" library.
  *        See related header file.
  *
@@ -36,7 +36,7 @@
 #define __PAGE_SIZE 4096
 #define __PAGE_MASK 0xfffffffffffff000ULL
 
-/*
+/**
  * Virtual kernel memory addresses at which the search starts and ends.
  * Note that this search covers 4 GiB of the kernel virtual address space,
  * where we expect to find the kernel's data segment as loaded at boot as
@@ -83,7 +83,7 @@ module_param(nr_sysnis, int, S_IRUGO);
 MODULE_PARM_DESC(nr_sysnis, "Number of hackable entries in the "
                  "syscall table.");
 
-/*
+/**
  * Library cleanup routine: restores entries and frees memory.
  */
 void scth_cleanup(void) {
@@ -105,8 +105,8 @@ void scth_cleanup(void) {
     printk(KERN_INFO "%s: System call table restored.\n", MODNAME);
 }
 
-/*
- * Routine to replace a free entry in the table with a pointer to some other
+/**
+ * Routine to replace a free entry in the table with a pointer to some other 
  * function.
  *
  * @param new_call_addr Pointer to replace.
@@ -132,7 +132,7 @@ int scth_hack(void *new_call_addr) {
     return -1;
 }
 
-/*
+/**
  * Routine to restore an entry in the table.
  *
  * @param to_restore Index of the entry to restore.
@@ -156,7 +156,7 @@ void scth_unhack(int to_restore) {
     }
 }
 
-/*
+/**
  * Scans the system call table and determines which entries can be hacked later.
  *
  * @param table_addr Virtual address of the system call table.
@@ -181,8 +181,8 @@ void scth_scan_table(void **table_addr) {
     }
 }
 
-/*
- * Checks whether a candidate address could point to the system call table by
+/**
+ * Checks whether a candidate address could point to the system call table by 
  * looking at the entries we know should point to "ni_syscall".
  *
  * @param addr Virtual address to check.
@@ -197,9 +197,9 @@ int scth_pattern_check(void **addr) {
     return 1;
 }
 
-/*
- * Checks whether a candidate address could point to the system call table by
- * ensuring that "ni_syscall" is pointed only where it should be, especially
+/**
+ * Checks whether a candidate address could point to the system call table by 
+ * ensuring that "ni_syscall" is pointed only where it should be, especially 
  * not before the first entry we know.
  *
  * @param addr Virtual address to check.
@@ -212,9 +212,9 @@ int scth_prev_area_check(void **addr) {
     return 1;
 }
 
-/*
- * Checks whether a given page could contain (part of) the system call table,
- * performing a linear pattern matching scan. Returns the table base address,
+/**
+ * Checks whether a given page could contain (part of) the system call table, 
+ * performing a linear pattern matching scan. Returns the table base address, 
  * if found.
  *
  * @param pg Virtual address of the page to check.
@@ -242,15 +242,15 @@ void **scth_check_page(void *pg) {
     return NULL;
 }
 
-/*
- * This function looks for the system call table searching kernel memory in a
- * linear fashion. It relies, together with previous routines, on the following
- * assumptions:
- * 1 - We can start the search at KERNEL_START_ADDR.
- * 2 - When the kernel image is loaded in memory, relative offsets between
- *     elements aren't randomized even if KASLR or similar are enabled.
- * 3 - Table entries are 8-bytes long and aligned.
- * 4 - Entries in "known_sysnis" point to "ni_syscall". Since layout is
+/**
+ * This function looks for the system call table searching kernel memory in a 
+ * linear fashion. It relies, together with previous routines, on the following 
+ * assumptions: 
+ * 1 - We can start the search at KERNEL_START_ADDR. 
+ * 2 - When the kernel image is loaded in memory, relative offsets between 
+ *     elements aren't randomized even if KASLR or similar are enabled. 
+ * 3 - Table entries are 8-bytes long and aligned. 
+ * 4 - Entries in "known_sysnis" point to "ni_syscall". Since layout is 
  *     subject to change over time, check the "syscall_64.tbl" file.
  *
  * @return UNISTD_64 system call table virtual address, or 0 if search fails.

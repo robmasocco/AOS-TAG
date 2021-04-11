@@ -1,4 +1,4 @@
-/* 
+/**
  * This is free software.
  * You can redistribute it and/or modify this file under the
  * terms of the GNU General Public License as published by the Free Software
@@ -13,7 +13,7 @@
  * this file; if not, write to the Free Software Foundation, Inc.,
  * 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA.
  */
-/* 
+/**
  * @brief Header file for a small library of functions and macros to access
  *        control registers and perform some architecture-specific tasks on
  *        x86 machines.
@@ -33,7 +33,7 @@
 
 #define __X86_CR0_WP 0x10000
 
-/* 
+/**
  * Returns the content of the CR3 register: physical address of the current
  * page table in main memory.
  * 
@@ -52,10 +52,10 @@ static inline unsigned long __x86_read_cr3(void) {
     return cr3;
 }
 
-/* 
- * Disables Write Protection on x86 CPUs, clearing the WP bit in CR0.
- * WARNING: To keep machine state consistent, this disables IRQs too, saving
- * their disabled state in the provided variable. Is meant to be used to circle
+/**
+ * Disables Write Protection on x86 CPUs, clearing the WP bit in CR0. 
+ * WARNING: To keep machine state consistent, this disables IRQs too, saving 
+ * their disabled state in the provided variable. Is meant to be used to circle 
  * some really critical, deterministic, nonblocking and short code.
  *
  * @param flags unsigned long in which to store IRQ state.
@@ -77,9 +77,9 @@ static inline unsigned long __x86_read_cr3(void) {
         );                             \
 	} while (0)
 
-/* 
- * Enables Write Protection on x86 CPUs, setting the WP bit in CR0.
- * WARNING: According to its dual above, this reenables IRQs, restoring the
+/**
+ * Enables Write Protection on x86 CPUs, setting the WP bit in CR0. 
+ * WARNING: According to its dual above, this reenables IRQs, restoring the 
  * saved state provided.
  *
  * @param flags unsigned long that holds IRQ state to restore.
