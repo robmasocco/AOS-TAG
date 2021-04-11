@@ -11,7 +11,6 @@
 #define MAX_INST 300  /* Simulates default max number of instances. */
 
 int max_inst = MAX_INST;  /* Simulates related kernel module parameter. */
-int __mask_len;  /* Number of ulongs in the mask, needs to be computed. */
 
 /* Bitmask of used tag descriptors. */
 tag_bitmask *tag_mask;
