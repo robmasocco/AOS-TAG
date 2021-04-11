@@ -103,16 +103,16 @@ Returns 0 if the message was read, or -1 and *errno* is set to indicate the caus
 - Lock receivers's rw_sem as reader.
 - Check instance pointer, eventually exit.
 - Check permissions if required (flag), eventually exit.
-- Acquire level condition spinlock as reader.
+- Acquire level condition spinlock.
 - Atomically read the current *condition selector* from the level condition struct.
 - Atomically increment the current *epoch presence counter* in the level condition struct.
 - **MEMORY FENCE**
-- Release level condition spinlock as reader.
-- Acquire instance condition spinlock as reader.
+- Release level condition spinlock.
+- Acquire instance condition spinlock.
 - Atomically read the current *global condition selector* from the instance condition struct.
 - Atomically increment the current *global epoch presence counter* in the instance condition struct.
 - **MEMORY FENCE**
-- Release instance condition spinlock as reader.
+- Release instance condition spinlock.
 - Wait on the current epoch's level queue (with *wait_event_interruptible(...)*) with (*curr_condition || curr_globl_condition*). Catch signals here and be very careful about which locks to release and counters to atomically decrement upon exit!!!
 - If *curr_globl_condition == True* we've been awoken:
     - Atomically decrement both global and level epoch presence counter.
@@ -148,11 +148,11 @@ Returns 0 if the message was correctly sent, or -1 and *errno* is set to indicat
 - *copy_from_user* into the new message buffer.
     This is slow, might block and might not be necessary if no one's there to get it, but we do it without acquiring any level-related lock first since it's the only thing senders can do independently of each other when on a same level. Wasting momentarily a bit of time and memory is a fair risk to take.
 - Acquire level senders mutex.
-- Acquire level condition spinlock as writer.
+- Acquire level condition spinlock.
 - Atomically read and flip the current *condition selector* from the level condition struct. This is the linearization point for the message buffer. Save the previous value.
 - Reset the new condition value to 0x0.
 - **MEMORY FENCE**
-- Release level condition spinlock as writer.
+- Release level condition spinlock.
 - Atomically read the current *epoch presence counter* from the level condition struct: exit if it is zero (no one is waiting for a message on this level, so discard yours). Remember to free the buffer!
 - Set the level message pointer to the new buffer.
 - Set message size.
@@ -189,11 +189,11 @@ Returns 0 if the requested operation was completed successfully, or -1 and *errn
     - Check instance pointer, eventually exit.
     - Check permissions if required (flag), eventually exit.
     - Acquire instance awake_all mutex.
-    - Acquire instance condition spinlock as writer.
+    - Acquire instance condition spinlock.
     - Atomically read and flip the current *condition selector* from the instance condition struct. Save the previous value.
     - Reset the new condition value to 0x0.
     - **MEMORY FENCE**
-    - Release instance condition spinlock as writer.
+    - Release instance condition spinlock.
     - Set the now "old" global condition to 0x1.
     - **STORE FENCE** (One can never be too sure.)
     - For each level in the instance:
@@ -401,7 +401,7 @@ The algorithm described here is a variation of the algorithm used in RCU linked 
 
 The writer posts a message in the level buffer (together with its size), updates the wakeup condition, then wakes readers up. Kernel-side buffers are dynamically allocated to allow for messages greater than two pages (8 MB) if required (i.e. temporarily saving the message to post in the stack it's not a great idea). Considering also the *copy_\** APIs, it won't be quick, but it won't waste any memory and use only what is necessary at any given time. Also, as for RCU, only one writer is allowed to change the epoch at any given time and then free the message buffer after the grace period, but given the nature of this system a sleeping lock, i.e. a mutex, is used instead of a spinlock.
 
-The wakeup condition is a particular epoch-based struct. When the epoch selector gets flipped, that's a linearization point for the message buffer: all receiver threads that got in there before this will get the message, others were too late. The only difference is the need for an rwlock to avoid that the epoch selector gets flipped before a receiver can atomically increment the corresponding epoch presence counter: this is required here because if not, there could be some unlikely but dangerous race conditions that would lead to a receiver registering to an epoch that is *two times ahead* the one that it believes to be in, thus behaving incorrectly and skipping a message that it should get.
+The wakeup condition is a particular epoch-based struct. When the epoch selector gets flipped, that's a linearization point for the message buffer: all receiver threads that got in there before this will get the message, others were too late. The only difference is the need for a spinlock to avoid that the epoch selector gets flipped before a receiver can atomically increment the corresponding epoch presence counter: this is required here because if not, there could be some unlikely but dangerous race conditions that would lead to a receiver registering to an epoch that is *two times ahead* the one that it believes to be in, thus behaving incorrectly and skipping a message that it should get.
 
 Writers wait for all readers that got a condition value, i.e. they busy-wait on the "old" presence counter to become zero. This represents RCU's grace period. For receivers, reading the current condition value at first, before atomically incrementing the presence counter, is very important to sync with the state, avoid deadlocks and be waited by the very next writer.
 
