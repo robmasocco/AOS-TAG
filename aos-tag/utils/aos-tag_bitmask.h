@@ -32,13 +32,15 @@
 #include <stdlib.h>
 #endif
 
-/* Structure that holds a bitmask and metadata to quickly manage it. */
+/**
+ * Structure that holds a bitmask and metadata to quickly manage it.
+ */
 typedef struct _tag_bitmask {
-    unsigned long *_mask;  /* Actual mask. Must be set manually outside. */
-    int _nr_tags;          /* Number of valid bits in the mask. */
-    int _mask_len;         /* Number of ulongs that compose the mask. */
+    unsigned long *_mask;    // Actual mask. Must be set manually outside.
+    unsigned int _nr_tags;   // Number of valid bits in the mask.
+    unsigned int _mask_len;  // Number of ulongs that compose the mask.
 #ifdef __KERNEL__
-    spinlock_t _lock;      /* Lock to synchronize accesses to the mask. */
+    spinlock_t _lock;        // Lock to synchronize accesses to the mask.
 #endif
 } tag_bitmask;
 
@@ -53,7 +55,7 @@ typedef struct _tag_bitmask {
     tag_bitmask *new_mask;                                                   \
     new_mask = (tag_bitmask *)calloc(1, sizeof(tag_bitmask));                \
     if (new_mask != NULL) {                                                  \
-        new_mask->_nr_tags = (nr_tags);                                      \
+        new_mask->_nr_tags = (unsigned int)(nr_tags);                        \
         new_mask->_mask_len = (nr_tags) / (sizeof(unsigned long) * 8);       \
         if ((nr_tags) % (sizeof(unsigned long) * 8)) new_mask->_mask_len++;  \
         new_mask->_mask = (unsigned long *)calloc(new_mask->_mask_len,       \
@@ -173,8 +175,8 @@ typedef struct _tag_bitmask {
         unsigned long curr_ulong;                                            \
         curr_ulong = ((tag_mask)->_mask)[i];                                 \
         int j;                                                               \
-        for (j = 0; j < (sizeof(unsigned long) * 8); j++) {                  \
-            if ((j + (i * sizeof(unsigned long) * 8)) >= nr_tags) break;     \
+        for (j = 0; j < (int)(sizeof(unsigned long) * 8); j++) {             \
+            if ((int)(j + (i * sizeof(unsigned long) * 8)) >= nr_tags) break;\
             if (!(curr_ulong & (0x1UL << j))) {                              \
                 ret = j + (i * sizeof(unsigned long) * 8);                   \
                 TAG_SET(tag_mask, ret);                                      \
