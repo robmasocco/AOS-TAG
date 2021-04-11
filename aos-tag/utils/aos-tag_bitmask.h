@@ -205,7 +205,7 @@ typedef struct _tag_bitmask {
     for (i = 0; i < mask_len; i++) {                                         \
         unsigned long curr_ulong;                                            \
         curr_ulong = ((tag_mask)->_mask)[i];                                 \
-        unsigned int j;                                                               \
+        unsigned int j;                                                      \
         for (j = 0; j < (sizeof(unsigned long) * 8); j++) {                  \
             if ((j + (i * sizeof(unsigned long) * 8)) >= nr_tags) break;     \
             if (!(curr_ulong & (0x1UL << j))) {                              \
