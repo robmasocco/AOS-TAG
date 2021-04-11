@@ -292,6 +292,7 @@ Operations marked as *nops* should return some kind of *errno* value to indicate
 ## OPEN
 
 Takes a snapshot of the state of the AOS-TAG service and saves it in text form in a buffer, which acts as the file.
+Such buffer is allocated with *vmalloc* instead of *kmalloc*, to avoid putting too much strain on the buddy allocators requesting many contiguous pages if the device file is opened many times.
 
 Returns 0 if all was done successfully and the "file" is ready, or -1 and *errno* is set to indicate the cause of the error.
 
@@ -300,7 +301,7 @@ Keep in mind that all data that forms the status of the system is at most 32 bit
 - Allocate a *line buffer* (80 chars) in the stack.
 - Allocate a 32-entries unsigned int array in the stack, for readers presence counters.
 - Allocate two unsigned ints, for the key and the creator EUID.
-- *kzalloc* a *file buffer* which will hold the file's contents, size: *max_instances* * *32 (levels)* * *80 (chars)*.
+- *vzalloc* a *file buffer* which will hold the file's contents, size: *max_instances* * *32 (levels)* * *80 (chars)*.
 - Allocate a _char *_ in the stack that for now points to the base of the aforementioned buffer.
 - For each entry in the instance struct array:
     - Trylock senders rw_sem as reader, *continue* if it fails (means that the instance is unavailable: it is being removed or created).
@@ -323,9 +324,9 @@ Again, be sure to release all locks and memory areas on any *if-else* sequence a
 
 ## CLOSE
 
-- Release the buffer.
+- *vfree* the buffer.
 - Set *private_data* to *NULL*.
-- Return 0. Nothing can go wrong (maybe only *kfree*, should we trace it?).
+- Return 0. Nothing can go wrong.
 
 ## READ
 
