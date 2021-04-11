@@ -103,16 +103,16 @@ Returns 0 if the message was read, or -1 and *errno* is set to indicate the caus
 - Lock receivers's rw_sem as reader.
 - Check instance pointer, eventually exit.
 - Check permissions if required (flag), eventually exit.
-- Acquire level condition rwlock as reader.
+- Acquire level condition spinlock as reader.
 - Atomically read the current *condition selector* from the level condition struct.
 - Atomically increment the current *epoch presence counter* in the level condition struct.
 - **MEMORY FENCE**
-- Release level condition rwlock as reader.
-- Acquire instance condition rwlock as reader.
+- Release level condition spinlock as reader.
+- Acquire instance condition spinlock as reader.
 - Atomically read the current *global condition selector* from the instance condition struct.
 - Atomically increment the current *global epoch presence counter* in the instance condition struct.
 - **MEMORY FENCE**
-- Release instance condition rwlock as reader.
+- Release instance condition spinlock as reader.
 - Wait on the current epoch's level queue (with *wait_event_interruptible(...)*) with (*curr_condition || curr_globl_condition*). Catch signals here and be very careful about which locks to release and counters to atomically decrement upon exit!!!
 - If *curr_globl_condition == True* we've been awoken:
     - Atomically decrement both global and level epoch presence counter.
@@ -148,11 +148,11 @@ Returns 0 if the message was correctly sent, or -1 and *errno* is set to indicat
 - *copy_from_user* into the new message buffer.
     This is slow, might block and might not be necessary if no one's there to get it, but we do it without acquiring any level-related lock first since it's the only thing senders can do independently of each other when on a same level. Wasting momentarily a bit of time and memory is a fair risk to take.
 - Acquire level senders mutex.
-- Acquire level condition rwlock as writer.
+- Acquire level condition spinlock as writer.
 - Atomically read and flip the current *condition selector* from the level condition struct. This is the linearization point for the message buffer. Save the previous value.
 - Reset the new condition value to 0x0.
 - **MEMORY FENCE**
-- Release level condition rwlock as writer.
+- Release level condition spinlock as writer.
 - Atomically read the current *epoch presence counter* from the level condition struct: exit if it is zero (no one is waiting for a message on this level, so discard yours). Remember to free the buffer!
 - Set the level message pointer to the new buffer.
 - Set message size.
@@ -189,11 +189,11 @@ Returns 0 if the requested operation was completed successfully, or -1 and *errn
     - Check instance pointer, eventually exit.
     - Check permissions if required (flag), eventually exit.
     - Acquire instance awake_all mutex.
-    - Acquire instance condition rwlock as writer.
+    - Acquire instance condition spinlock as writer.
     - Atomically read and flip the current *condition selector* from the instance condition struct. Save the previous value.
     - Reset the new condition value to 0x0.
     - **MEMORY FENCE**
-    - Release instance condition rwlock as writer.
+    - Release instance condition spinlock as writer.
     - Set the now "old" global condition to 0x1.
     - **STORE FENCE** (One can never be too sure.)
     - For each level in the instance:
@@ -265,7 +265,7 @@ Each entry holds:
 - One atomic char *epoch selector*.
 - Array of two char *conditions*.
 - Array of two atomic long *presence counters*.
-- rwlock "condition rwlock".
+- spinlock "condition lock".
 
 # MODULE PARAMETERS
 
@@ -308,7 +308,7 @@ Keep in mind that all data that forms the status of the system is at most 32 bit
     - Trylock senders rw_sem as reader, *continue* if it fails (means that the instance is unavailable: it is being removed or created).
     - If the instance struct pointer is not *NULL*:
         - Get the key, the creator EUID and (atomically) the current epoch receivers presence counters (in another *for* loop).
-            Keep in mind that this is just a snapshot: we make the best effort we can at reading what is currently happening in the system, among all the possible race conditions that can occur, but that are don't cares for us since in the moment we got to read the status of that level, that was the epoch it was in. Thus, we just atomically read values without grabbing any rwlock.
+            Keep in mind that this is just a snapshot: we make the best effort we can at reading what is currently happening in the system, among all the possible race conditions that can occur, but that are don't cares for us since in the moment we got to read the status of that level, that was the epoch it was in. Thus, we just atomically read values without grabbing any lock.
         - **STORE FENCE**
         - Release senders rw_sem as reader.
         - For each of the 32 levels:
@@ -364,12 +364,14 @@ Develop the baseline version first, then make sure it is doable and discuss it w
 
 # SYNCHRONIZATION
 
-**At first, each operation should be protected with a *try_module_get/module_put* pair, the very first and last instructions of each system call, to ensure that the data structures we're about to access don't magically fade away whilst we're operating on them. Yes, there could still be race conditions, but you'd have to intentionally break the system to make them happen.**
+**At first, each operation should be protected with a *try_module_get/module_put* pair, the very first and last instructions of each system call, to ensure that the data structures we're about to access don't magically fade away whilst we're operating on them. Yes, there could still be race conditions before the actual locking takes place, but you'd have to intentionally break the system to make them happen.**
 
-Each synchronization scheme implemented is based on a light use of both:
+Each synchronization scheme implemented, that makes the basic aforementioned operations work, is thoroughly described below, though the pseudocode above should have already given many hints.
+Some sections rely on a light use of:
 
 - Sleeping locks, in the form of mutexes and rw_semaphores. The last ones are used primarily as presence counters, with the ability to exclude threads when needed without holding CPUs.
-- Spinning locks, in the form of spinlocks and rwlocks, to guard status-critical data structures. Critical sections involving these have been kept as small and quick as possible, and are meant to be executed ASAP, so we'd like some speed also while locking. But we're not coding interrupt handlers, so we don't need the additional overhead that comes when blocking IRQs, which is why we use only the basic APIs.
+- Spinning locks, in the form of spinlocks, to guard status-critical data structures. Critical sections involving these have been kept as small and quick as possible, and are meant to be executed ASAP, so we'd like some speed also while locking. But we're not coding interrupt handlers, so we don't need the additional overhead that comes when blocking IRQs, which is why we use only the basic APIs.
+    One last word about the ***condition structure* lock**: could we have used an *rwlock* there, instead of a spinlock? Sure, most of the time this is accessed by readers and a lock is really needed only to prevent a particularly bad race condition, so why the full exclusion? Because compared to spinlocks, especially when the critical section is short, rwlocks are [slow](https://www.kernel.org/doc/html/latest/locking/spinlocks.html#lesson-2-reader-writer-spinlocks), effectively slower than using a fully exclusive spinning lock. Considering that the critical sections that involve such structure are only made of one or two simple atomic operations, the choice has favored spinlocks instead of rwlocks.
 
 ## ACCESS TO THE BST-DICTIONARY
 
