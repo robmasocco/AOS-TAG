@@ -20,3 +20,5 @@
  *
  * @date April 10, 2021
  */
+
+#define MODNAME "AOS-TAG"

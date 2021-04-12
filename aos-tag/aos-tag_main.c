@@ -20,3 +20,23 @@
  *
  * @date April 10, 2021
  */
+
+#include <linux/kernel.h>
+#include <linux/module.h>
+#include <linux/slab.h>
+#include <linux/errno.h>
+#include <linux/version.h>
+
+#include "include/aos-tag_defs.h"
+
+/* This module only works for kernels equal or later than 4.17. */
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4,17,0)
+#error "This module requires kernel >= 4.17."
+#endif
+
+MODULE_LICENSE("GPL");
+MODULE_AUTHOR("Roberto Masocco <robmasocco@gmail.com>");
+MODULE_DESCRIPTION("Tag-based IPC service.");
+MODULE_INFO(name, "aos-tag");
+MODULE_INFO(OS, "Linux");
+MODULE_VERSION("1.0");
