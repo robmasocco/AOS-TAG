@@ -21,6 +21,9 @@
  * @date April 10, 2021
  */
 
+#ifndef _AOS-TAG_CONDITIONS_H
+#define _AOS-TAG_CONDITIONS_H
+
 #include <linux/spinlock.h>
 
 /**
@@ -111,3 +114,5 @@ typedef struct _tag_cond_t {
  * @return Value of the specified condition, by direct evaluation.
  */
 #define TAG_COND_VAL(cond_addr, epoch) (cond_addr)->_conditions[epoch]
+
+#endif
