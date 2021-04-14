@@ -25,6 +25,9 @@
  *       purposes only.
  */
 
+#ifndef _AOS-TAG_BITMASK_H
+#define _AOS-TAG_BITMASK_H
+
 #ifdef __KERNEL__
 #include <linux/slab.h>
 #include <linux/spinlock.h>
@@ -222,4 +225,6 @@ typedef struct _tag_bitmask {
     }                                                                        \
     spin_unlock(&((tag_mask)->_lock));                                       \
     ret; })
+#endif
+
 #endif
