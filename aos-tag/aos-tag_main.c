@@ -39,6 +39,8 @@
 
 #include "utils/aos-tag_bitmask.h"
 
+#include "splay-trees_int-keys/splay-trees_int-keys.h"
+
 /* This module only works for kernels equal or later than 4.17. */
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 17, 0)
 #error "This module requires kernel >= 4.17."
@@ -110,3 +112,12 @@ __SYSCALL_DEFINEx(2, _tag_ctl, int, tag, int, cmd) {
 
 /* Required module's reference. */
 struct module *scth_mod;
+
+/* GLOBAL MODULE VARIABLES */
+/* Shared instances BST-dictionary. */
+SplayIntTree *shared_bst = NULL;
+DECLARE_RWSEM(shared_bst_lock);
+
+/* Instances array and related bitmask. */
+tag_ptr_t *tags_list = NULL;
+tag_bitmask *tags_mask = NULL;
