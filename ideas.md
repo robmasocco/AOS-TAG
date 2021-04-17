@@ -55,7 +55,7 @@ If any of the aforementioned steps fails, the routine should terminate releasing
 - Remove the tag bitmask.
 - Remove the BST dictionary.
 
-Each of the aforementioned steps must at least be attempted, in order to remove as many resources as possible. If at the end some failed, an error code should be returned.
+Each of the aforementioned steps must at least be attempted, in order to remove as many resources as possible. If at the end some failed, we should only report it in the kernel log since no error code can be returned.
 
 # OPERATIONS DETAILS
 
