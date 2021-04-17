@@ -69,7 +69,6 @@ This uses instance rw_sems as a writer to avoid race conditions on an instance.
 
 Returns the tag descriptor (array index) of the new instance, or -1 and *errno* is set to indicate the cause of the error.
 
-- *try_module_get*
 - Consistency checks on input arguments.
 - If *command* is *TAG_OPEN* and *key* is not *IPC_PRIVATE*:
     - Acquire the tree rw_sem as a reader.
@@ -89,10 +88,9 @@ Returns the tag descriptor (array index) of the new instance, or -1 and *errno* 
     - If key is not *IPC_PRIVATE*:
         - Add a new entry to the tree.
         - Release the tree rw_sem as a writer.
-- *module_put*
 - Return.
 
-Ensure proper locks are released in each *if-else* to avoid deadlocks, and that the module is always released.
+Ensure proper locks are released in each *if-else* to avoid deadlocks.
 
 ## *int tag_receive(int tag, int level, char \*buffer, size_t size)*
 
@@ -100,7 +98,6 @@ This configures the running thread as a *reader thread*.
 
 Returns 0 if the message was read, or -1 and *errno* is set to indicate the cause of the error.
 
-- *try_module_get*
 - Consistency checks on input arguments.
 - Lock receivers's rw_sem as reader.
 - Check instance pointer, eventually exit.
@@ -124,14 +121,13 @@ Returns 0 if the message was read, or -1 and *errno* is set to indicate the caus
     - *copy_to_user* the new message from the pointed buffer.
 - Atomically decrement epoch presence counter.
 - Release receivers's rw_sem as a reader.
-- *module_put*
 - Return.
 
 TSO bypasses are avoided by executing memory barriers embedded in spinlocks and wait queue APIs, and by using atomic GCC builtins.
 
 Ensure to speed things up a bit if read message length is zero.
 
-Ensure proper locks are released in each *if-else* to avoid deadlocks, that incremented counters are always subsequently decremented, and that the module is always released.
+Ensure proper locks are released in each *if-else* to avoid deadlocks, that incremented counters are always subsequently decremented.
 
 ## *int tag_send(int tag, int level, char \*buffer, size_t size)*
 
@@ -141,7 +137,6 @@ Only one writer should be active at any given time, since there's no message log
 
 Returns 0 if the message was correctly sent, or -1 and *errno* is set to indicate the cause of the error.
 
-- *try_module_get*
 - Consistency checks on input arguments.
 - Lock senders's rw_sem as reader.
 - Check instance pointer, eventually exit.
@@ -169,14 +164,13 @@ Returns 0 if the message was correctly sent, or -1 and *errno* is set to indicat
 - Release level senders mutex.
 - Release senders's rw_sem as reader.
 - *kfree* the message buffer.
-- *module_put*
 - Return.
 
 TSO bypasses are avoided by executing memory barriers and those embedded in spinlocks and wait queue APIs, and by using GCC atomic builtins.
 
 Ensure to speed things up a bit if message length is zero, so the thread just have to be awoken and no blocking *copy_from_user* API is ever called.
 
-Ensure proper locks are released in each *if-else* to avoid deadlocks, and that the module is always released.
+Ensure proper locks are released in each *if-else* to avoid deadlocks.
 
 ## *int tag_ctl(int tag, int command)*
 
@@ -184,7 +178,6 @@ Allows the calling thread to awake all readers potentially waiting on any level 
 
 Returns 0 if the requested operation was completed successfully, or -1 and *errno* is set to indicate the cause of the error.
 
-- *try_module_get*
 - Consistency checks on input arguments.
 - If *command* is *AWAKE_ALL*:
     - Lock senders's rw_sem as reader.
@@ -222,10 +215,9 @@ Returns 0 if the requested operation was completed successfully, or -1 and *errn
     - Remove the tag descriptor from the bitmask.
     - Release bitmask spinlock.
     - Set creator EUID to zero (for security), then *kfree* instance struct.
-- *module_put*
 - Return.
 
-Ensure proper locks are released in each *if-else* to avoid deadlocks, and that the module is always released.
+Ensure proper locks are released in each *if-else* to avoid deadlocks.
 
 # DATA STRUCTURES AND TYPES
 
@@ -333,7 +325,7 @@ Again, be sure to release all locks and memory areas on any *if-else* sequence a
 
 ## READ
 
-*copy_to_user* stuff from the file buffer, with size checks, return values, EOF setting, f_pos advancing and shit.
+*copy_to_user* stuff from the file buffer, with size checks, return values, EOF setting, f_pos advancing and stuff.
 
 ## LSEEK
 
@@ -365,8 +357,6 @@ What about *IPC_PRIVATE*? Which routines would need to be called?
 Develop the baseline version first, then make sure it is doable and discuss it with Quaglia to avoid conflicts with the specification. Could be a nice addition. Might require an extension of the original driver using the minor number. Might be *ioctl*-based.
 
 # SYNCHRONIZATION
-
-**At first, each operation should be protected with a *try_module_get/module_put* pair, the very first and last instructions of each system call, to ensure that the data structures we're about to access don't magically fade away whilst we're operating on them. Yes, there could still be race conditions before the actual locking takes place, but you'd have to intentionally break the system to make them happen.**
 
 Each synchronization scheme implemented, that makes the basic aforementioned operations work, is thoroughly described below, though the pseudocode above should have already given many hints.
 Some sections rely on a light use of:
@@ -419,11 +409,10 @@ Full instance wakeups work in a similar fashion, as is clear from the pseudocode
 
 # EXTRAS
 
-- Module parameters consistency check at insertion during *init_module*, especially for max values and sizes of stuff.
 - Error checks and errno settings everywhere.
 - Definitions of system call numbers for the user code given by *make* after module insertion using *awk* to read numbers from pseudofiles.
 - *__randomize_layout* of some structs?
 - Docs in here:
     - A README for SCTH.
-    - Noted on module locking, as above.
+        Mention that we left it as a secondary module to experiment with exported symbols, module dependencies, and module locking, but that for simplicity we left it as the homework required: with no synchronization whatsoever.
 
