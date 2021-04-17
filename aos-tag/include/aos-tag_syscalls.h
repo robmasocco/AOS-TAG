@@ -15,6 +15,8 @@
  */
 /**
  * @brief Declarations of system calls included in this module.
+ *        Signatures and values in here follow the same layout in
+ *        corresponding userspace headers.
  *
  * @author Roberto Masocco
  *
@@ -25,6 +27,15 @@
 #define _AOS_TAG_SYSCALLS_H
 
 #include <linux/types.h>
+
+/* tag_get commands and special keys. */
+#define __TAG_OPEN 0
+#define __TAG_CREATE 1
+#define __TAG_IPC_PRIVATE -1
+
+/* tag_ctl commands. */
+#define __TAG_AWAKE_ALL 0
+#define __TAG_REMOVE 1
 
 int aos_tag_get(int key, int cmd, int perm);
 int aos_tag_rcv(int tag, int lvl, char *buf, size_t size);
