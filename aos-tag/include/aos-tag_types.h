@@ -30,8 +30,8 @@
 #include <linux/cred.h>
 #include <linux/wait.h>
 
-#include "include/aos-tag_defs.h"
-#include "utils/aos-tag_conditions.h"
+#include "aos-tag_defs.h"
+#include "../utils/aos-tag_conditions.h"
 
 /** 
  * Instance structure.
@@ -57,7 +57,7 @@ typedef struct _tag_t {
 typedef struct _tag_ptr_t {
     tag_t *ptr;                      // Pointer to the corresponding instance.
     struct rw_semaphore rcv_rwsem;   // For receivers as readers.
-    struct rw_semaphore send_rwsem;  // For senders as readers.
+    struct rw_semaphore snd_rwsem;   // For senders as readers.
 } tag_ptr_t;
 
 #endif
