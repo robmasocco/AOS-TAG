@@ -23,14 +23,24 @@
 
 #include <linux/kernel.h>
 #include <linux/module.h>
+#include <linux/types.h>
 #include <linux/slab.h>
+#include <linux/syscalls.h>
+#include <linux/rwsem.h>
 #include <linux/errno.h>
 #include <linux/version.h>
 
+#include "scth/include/scth.h"
+
+#include "include/aos-tag_types.h"
+#include "include/aos-tag_syscalls.h"
 #include "include/aos-tag_defs.h"
+#include "include/aos-tag_dev-driver.h"
+
+#include "utils/aos-tag_bitmask.h"
 
 /* This module only works for kernels equal or later than 4.17. */
-#if LINUX_VERSION_CODE < KERNEL_VERSION(4,17,0)
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 17, 0)
 #error "This module requires kernel >= 4.17."
 #endif
 

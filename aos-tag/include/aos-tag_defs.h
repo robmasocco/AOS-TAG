@@ -26,4 +26,6 @@
 
 #define MODNAME "AOS-TAG"
 
+#define __NR_LEVELS 32  // Number of levels in an instance.
+
 #endif

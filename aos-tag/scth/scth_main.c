@@ -36,7 +36,7 @@
 #define MODNAME "SCTH"
 
 /* This module only works for kernels equal or later than 4.17. */
-#if LINUX_VERSION_CODE < KERNEL_VERSION(4,17,0)
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 17, 0)
 #error "This module requires kernel >= 4.17."
 #endif
 

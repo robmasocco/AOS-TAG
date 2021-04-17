@@ -237,7 +237,7 @@ This dictionary holds *key-tag descriptor* pairs of the instances that were **NO
 - int tag descriptor, index in the shared instances array.
 - Pointers to make the tree work as a linked structure.
 
-## SHARED INSTANCES ARRAY
+## INSTANCES ARRAY
 
 Array of structs with protected instance pointers, indexed by "tag descriptor".
 
