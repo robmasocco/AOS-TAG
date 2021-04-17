@@ -21,8 +21,8 @@
  * @date April 10, 2021
  */
 
-#ifndef _AOS-TAG_DEFS_H
-#define _AOS-TAG_DEFS_H
+#ifndef _AOS_TAG_DEFS_H
+#define _AOS_TAG_DEFS_H
 
 #define MODNAME "AOS-TAG"
 

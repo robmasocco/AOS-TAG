@@ -25,8 +25,8 @@
  *       purposes only.
  */
 
-#ifndef _AOS-TAG_BITMASK_H
-#define _AOS-TAG_BITMASK_H
+#ifndef _AOS_TAG_BITMASK_H
+#define _AOS_TAG_BITMASK_H
 
 #ifdef __KERNEL__
 #include <linux/slab.h>
