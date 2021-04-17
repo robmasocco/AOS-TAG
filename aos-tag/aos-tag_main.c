@@ -50,3 +50,27 @@ MODULE_DESCRIPTION("Tag-based IPC service.");
 MODULE_INFO(name, "aos-tag");
 MODULE_INFO(OS, "Linux");
 MODULE_VERSION("1.0");
+
+/* SYSTEM CALLS STUBS */
+/* tag_get kernel level stub. */
+__SYSCALL_DEFINEx(3, _tag_get, int, key, int, cmd, int, perm) {
+    return aos_tag_get(key, cmd, perm);
+}
+
+/* tag_receive kernel level stub. */
+__SYSCALL_DEFINEx(4, _tag_rcv, int, tag, int, lvl, char*, buf, size_t, size) {
+    return aos_tag_rcv(tag, lvl, buf, size);
+}
+
+/* tag_send kernel level stub. */
+__SYSCALL_DEFINEx(4, _tag_snd, int, tag, int, lvl, char*, buf, size_t, size) {
+    return aos_tag_snd(tag, lvl, buf, size);
+}
+
+/* tag_ctl kernel level stub. */
+__SYSCALL_DEFINEx(2, _tag_ctl, int, tag, int, cmd) {
+    return aos_tag_ctl(tag, cmd);
+}
+
+/* Required module's reference. */
+struct module *scth_mod;

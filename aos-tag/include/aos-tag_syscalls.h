@@ -14,9 +14,21 @@
  * 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA.
  */
 /**
- * @brief Declarations of syscalls included in this module.
+ * @brief Declarations of system calls included in this module.
  *
  * @author Roberto Masocco
  *
  * @date April 10, 2021
  */
+
+#ifndef _AOS-TAG_SYSCALLS_H
+#define _AOS-TAG_SYSCALLS_H
+
+#include <linux/types.h>
+
+int aos_tag_get(int key, int cmd, int perm);
+int aos_tag_rcv(int tag, int lvl, char *buf, size_t size);
+int aos_tag_snd(int tag, int lvl, char *buf, size_t size);
+int aos_tag_ctl(int tag, int cmd);
+
+#endif
