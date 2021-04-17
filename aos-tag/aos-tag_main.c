@@ -51,6 +51,42 @@ MODULE_INFO(name, "aos-tag");
 MODULE_INFO(OS, "Linux");
 MODULE_VERSION("1.0");
 
+/* MODULE PARAMETERS */
+/* tag_get system call number. */
+int tag_get_nr = 0;
+module_param(tag_get_nr, int, S_IRUGO);
+MODULE_PARAM_DESC(tag_get_nr, "tag_get syscall number.");
+
+/* tag_receive system call number. */
+int tag_receive_nr = 0;
+module_param(tag_receive_nr, int, S_IRUGO);
+MODULE_PARAM_DESC(tag_receive_nr, "tag_receive syscall number.");
+
+/* tag_send system call number. */
+int tag_send_nr = 0;
+module_param(tag_send_nr, int, S_IRUGO);
+MODULE_PARAM_DESC(tag_send_nr, "tag_send syscall number.");
+
+/* tag_ctl system call number. */
+int tag_ctl_nr = 0;
+module_param(tag_ctl_nr, int, S_IRUGO);
+MODULE_PARAM_DESC(tag_ctl_nr, "tag_ctl syscall number.");
+
+/* Device driver major number. */
+int tag_drv_major = 0;
+module_param(tag_drv_major, int, S_IRUGO);
+MODULE_PARAM_DESC(tag_drv_major, "Device driver major number.");
+
+/* Max number of active instances. */
+unsigned long max_tags = __MAX_TAGS_DFL;
+module_param(max_tags, ulong, S_IRUGO);
+MODULE_PARAM_DESC(max_tags, "Max number of active instances.");
+
+/* Max message size. */
+unsigned long max_msg_sz = __MAX_MSG_SZ_DFL;
+module_param(max_msg_sz, ulong, S_IRUGO);
+MODULE_PARAM_DESC(max_msg_sz, "Max message size for all instances.");
+
 /* SYSTEM CALLS STUBS */
 /* tag_get kernel level stub. */
 __SYSCALL_DEFINEx(3, _tag_get, int, key, int, cmd, int, perm) {

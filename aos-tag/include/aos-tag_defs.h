@@ -28,4 +28,8 @@
 
 #define __NR_LEVELS 32  // Number of levels in an instance.
 
+#define __MAX_TAGS_DFL 256  // Default max number of active instances.
+
+#define __MAX_MSG_SZ_DFL 4096  // Default max message size, in bytes.
+
 #endif
