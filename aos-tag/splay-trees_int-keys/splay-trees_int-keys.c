@@ -28,8 +28,10 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/slab.h>
-#include <limits.h>
-#include "splay-trees_int-keys/splay-trees_int-keys.h"
+
+#include "splay-trees_int-keys.h"
+
+#define __ULONG_MAX 18446744073709551615UL
 
 /* Internal library subroutines declarations. */
 SplayIntNode *_spli_create_node(int new_key, void *new_data);
@@ -58,7 +60,7 @@ SplayIntTree *create_splay_int_tree(void) {
     if (new_tree == NULL) return NULL;
     new_tree->_root = NULL;
     new_tree->nodes_count = 0;
-    new_tree->max_nodes = ULONG_MAX;
+    new_tree->max_nodes = __ULONG_MAX;
     return new_tree;
 }
 
@@ -71,6 +73,8 @@ SplayIntTree *create_splay_int_tree(void) {
  * @return 0 if all went well, or -1 if input args were bad.
  */
 int delete_splay_int_tree(SplayIntTree *tree, int opts) {
+    SplayIntNode **nodes;
+    unsigned long int i;
     // Sanity check on input arguments.
     if ((tree == NULL) || (opts < 0)) return -1;
     // If the tree is empty free it directly.
@@ -79,10 +83,8 @@ int delete_splay_int_tree(SplayIntTree *tree, int opts) {
         return 0;
     }
     // Do a BFS to get all the nodes (less taxing on memory than a DFS).
-    SplayIntNode **nodes;
     nodes = (SplayIntNode **)splay_int_bfs(tree, BFS_LEFT_FIRST, SEARCH_NODES);
     // Free the nodes and eventually their data.
-    unsigned long int i;
     for (i = 0; i < tree->nodes_count; i++) {
         if (opts & DELETE_FREE_DATA) kfree((*(nodes[i]))._data);
         _spli_delete_node(nodes[i]);
@@ -102,8 +104,8 @@ int delete_splay_int_tree(SplayIntTree *tree, int opts) {
  * @return Data stored in a node (if any) or pointer to the node (if any).
  */
 void *splay_int_search(SplayIntTree *tree, int key, int opts) {
-    if ((opts <= 0) || (tree == NULL)) return NULL;  // Sanity check.
     SplayIntNode *searched_node;
+    if ((opts <= 0) || (tree == NULL)) return NULL;  // Sanity check.
     searched_node = _spli_search_node(tree, key);
     if (searched_node == NULL) return NULL;
     if (opts & SEARCH_DATA) return searched_node->_data;
@@ -120,16 +122,16 @@ void *splay_int_search(SplayIntTree *tree, int key, int opts) {
  * @return 1 if found and deleted, 0 if not found or input args were bad.
  */
 int splay_int_delete(SplayIntTree *tree, int key, int opts) {
+    SplayIntNode *to_delete;
     // Sanity check on input arguments.
     if ((opts < 0) || (tree == NULL)) return 0;
-    SplayIntNode *to_delete;
     to_delete = _spli_search_node(tree, key);
     if (to_delete != NULL) {
+        SplayIntNode *left_sub, *right_sub;
         // Splay the target node. Follow the content swaps!
         while (tree->_root != to_delete)
             to_delete = _spli_splay(to_delete);
         // Remove the new root from the tree, then join the two subtrees.
-        SplayIntNode *left_sub, *right_sub;
         left_sub = _spli_cut_left_subtree(to_delete);
         right_sub = _spli_cut_right_subtree(to_delete);
         tree->_root = _spli_join(left_sub, right_sub);
@@ -151,9 +153,9 @@ int splay_int_delete(SplayIntTree *tree, int key, int opts) {
  * @return Internal nodes counter after the insertion, or 0 if full/bad args.
  */
 ulong splay_int_insert(SplayIntTree *tree, int new_key, void *new_data) {
+    SplayIntNode *new_node;
     if (tree == NULL) return 0;  // Sanity check.
     if (tree->nodes_count == tree->max_nodes) return 0;  // The tree is full.
-    SplayIntNode *new_node;
     new_node = _spli_create_node(new_key, new_data);
     if (tree->_root == NULL) {
         // The tree is empty.
@@ -202,11 +204,13 @@ ulong splay_int_insert(SplayIntTree *tree, int new_key, void *new_data) {
  * @return Pointer to an array with the result of the search correctly ordered.
  */
 void **splay_int_bfs(SplayIntTree *tree, int type, int opts) {
+    void **bfs_res = NULL;
+    void **int_ptr;
+    SplayIntNode *curr;
+    unsigned long int i;
     // Sanity check on input arguments.
     if ((tree == NULL) || (tree->_root == NULL)) return NULL;
     // Allocate memory.
-    void **bfs_res = NULL;
-    void **int_ptr;
     if (opts & SEARCH_DATA) {
         bfs_res = kzalloc((tree->nodes_count) * sizeof(void *), GFP_KERNEL);
     } else if (opts & SEARCH_NODES) {
@@ -216,10 +220,8 @@ void **splay_int_bfs(SplayIntTree *tree, int type, int opts) {
     if (bfs_res == NULL) return NULL;
     int_ptr = bfs_res + 1;
     *bfs_res = (void *)(tree->_root);
-    SplayIntNode *curr;
     // Start the visit, using the same array to return as a temporary queue
     // for the nodes.
-    unsigned long int i;
     for (i = 0; i < tree->nodes_count; i++) {
         curr = (SplayIntNode *)bfs_res[i];
         // Visit the current node.
@@ -351,9 +353,9 @@ SplayIntNode *_spli_max_key_son(SplayIntNode *node) {
  * @return Pointer to the target node, or NULL if none or input args were bad.
  */
 SplayIntNode *_spli_search_node(SplayIntTree *tree, int key) {
-    if (tree->_root == NULL) return NULL;
     SplayIntNode *curr = tree->_root;
     int comp;
+    if (curr == NULL) return NULL;
     while (curr != NULL) {
         comp = curr->_key - key;
         if (comp > 0) {
@@ -389,10 +391,10 @@ void _spli_swap_info(SplayIntNode *node1, SplayIntNode *node2) {
  */
 void _spli_right_rotation(SplayIntNode *node) {
     SplayIntNode *left_son = node->_left_son;
+    SplayIntNode *r_tree, *l_tree, *l_tree_l, *l_tree_r;
     // Swap the node and its son's contents to make it climb.
     _spli_swap_info(node, left_son);
     // Shrink the tree portion in subtrees.
-    SplayIntNode *r_tree, *l_tree, *l_tree_l, *l_tree_r;
     r_tree = _spli_cut_right_subtree(node);
     l_tree = _spli_cut_left_subtree(node);
     l_tree_l = _spli_cut_left_subtree(left_son);
@@ -411,10 +413,10 @@ void _spli_right_rotation(SplayIntNode *node) {
  */
 void _spli_left_rotation(SplayIntNode *node) {
     SplayIntNode *right_son = node->_right_son;
+    SplayIntNode *r_tree, *l_tree, *r_tree_l, *r_tree_r;
     // Swap the node and its son's contents to make it climb.
     _spli_swap_info(node, right_son);
     // Shrink the tree portion in subtrees.
-    SplayIntNode *r_tree, *l_tree, *r_tree_l, *r_tree_r;
     r_tree = _spli_cut_right_subtree(node);
     l_tree = _spli_cut_left_subtree(node);
     r_tree_l = _spli_cut_left_subtree(right_son);
@@ -435,12 +437,12 @@ void _spli_left_rotation(SplayIntNode *node) {
  * @return Pointer to the splayed node as it climbs up (content swaps!).
  */
 SplayIntNode *_spli_splay(SplayIntNode *node) {
+    SplayIntNode *father_node, *grand_node, *new_curr_node;
     // Consistency checks.
     if (node == NULL) return NULL;
     if (node->_father == NULL) return node;  // Nothing to do.
-    SplayIntNode *father_node = node->_father;
-    SplayIntNode *grand_node = father_node->_father;
-    SplayIntNode *new_curr_node;
+    father_node = node->_father;
+    grand_node = father_node->_father;
     if (grand_node == NULL) {
         // Case 1: Father is the root. Rotate to climb accordingly.
         if (father_node->_left_son == node) _spli_right_rotation(father_node);
@@ -491,13 +493,13 @@ SplayIntNode *_spli_splay(SplayIntNode *node) {
  * @return Pointer to the new root node.
  */
 SplayIntNode *_spli_join(SplayIntNode *left_root, SplayIntNode *right_root) {
+    SplayIntNode *left_max;
     // Easy cases: one or both subtrees are missing.
     if ((left_root == NULL) && (right_root == NULL)) return NULL;
     if (left_root == NULL) return right_root;
     if (right_root == NULL) return left_root;
     // Not-so-easy case: splay the largest-key node in the left subtree and
     // then join the right as right subtree.
-    SplayIntNode *left_max;
     left_max = _spli_max_key_son(left_root);
     while (left_root != left_max)
         left_max = _spli_splay(left_max);

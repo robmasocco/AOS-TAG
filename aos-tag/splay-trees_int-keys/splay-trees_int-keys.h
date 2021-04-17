@@ -73,7 +73,7 @@ typedef unsigned long int ulong;
  * The data kept inside the node can be everything, as long as it's at most
  * sizeof(void *)-wide. Could be e.g. pointers.
  * Note that, as per the deletion options, is not possible to have only SOME
- * data in the heap: either all or none, so think about the data you're
+ * dynamic data: either all or none, so think about the data you're
  * providing to these functions.
  * NOTE: In this implementation, we try to align nodes to cache lines in order
  *       to optimize accesses using hot cache lines and the splay tree behaviour
@@ -85,7 +85,7 @@ struct _splay_int_node {
     struct _splay_int_node *_right_son;
     int _key;
     void *_data;
-} __attrbute__ ((aligned (X86_CACHE_LINE_SZ)));
+} __attribute__((aligned(X86_CACHE_LINE_SZ)));
 typedef struct _splay_int_node SplayIntNode;
 
 /**
@@ -102,7 +102,7 @@ typedef struct {
     SplayIntNode *_root;
     unsigned long int nodes_count;
     unsigned long int max_nodes;
-} __attribute__ ((aligned (X86_CACHE_LINE_SZ))) SplayIntTree;
+} __attribute__((aligned(X86_CACHE_LINE_SZ))) SplayIntTree;
 
 /* Library functions. */
 SplayIntTree *create_splay_int_tree(void);
