@@ -155,7 +155,8 @@ int aos_tag_get(int key, int cmd, int perm) {
             ins_res = splay_int_insert(shared_bst, key, tag);
             if (unlikely(ins_res == 0)) {
                 // Insertion in the BST failed.
-                // Now this is bad: we have to undo all that we just did.
+                // Now this is bad: we have to undo all that we just did,
+                // but we released locks.
                 // Given how bad this is we don't admit interruptions.
                 down_write(&(tags_list[tag].rcv_rwsem));
                 down_write(&(tags_list[tag].snd_rwsem));
