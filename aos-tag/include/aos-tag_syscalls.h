@@ -33,7 +33,7 @@
 #define __TAG_CREATE 1
 #define __TAG_ALL 0
 #define __TAG_USR 1
-#define __TAG_IPC_PRIVATE -1
+#define __TAG_IPC_PRIVATE 0  // This value is coeherent with sys/ipc.h.
 
 /* tag_ctl commands. */
 #define __TAG_AWAKE_ALL 0

@@ -24,16 +24,149 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/types.h>
+#include <linux/slab.h>
+#include <linux/rwsem.h>
+#include <linux/wait.h>
+#include <linux/mutex.h>
+#include <linux/cred.h>
+#include <linux/errno.h>
+#include <linux/compiler.h>
 
 #include "include/aos-tag_defs.h"
 #include "include/aos-tag_types.h"
 #include "include/aos-tag_syscalls.h"
 
+#include "utils/aos-tag_bitmask.h"
+#include "utils/aos-tag_conditions.h"
+
+#include "splay-trees_int-keys/splay-trees_int-keys.h"
+
+extern SplayIntTree *shared_bst;
+extern struct rw_semaphore shared_bst_lock;
+
+extern tag_ptr_t *tags_list;
+extern tag_bitmask *tags_mask;
+
+/**
+ * Opens a new instance of the service. 
+ * Instances can be shared or not, depending on the value of key. 
+ * An instance can be created or reopened, depending on the value of cmd. 
+ * With perm, it is possible to specify whether permission checks should be 
+ * peformed to limit access to threads executing on behalf of the same user 
+ * that created the instance. 
+ * Shared instances will be added to the BST, thus everyone could potentially 
+ * reopen them (but following operations might check permissions), 
+ * instead PRIVATE ones will only be created and added to the static list.
+ *
+ * @param key Key to assign to the new instance, or to look for in the BST.
+ * @param cmd Open a new instance, or look for an existing one.
+ * @param perm Enables EUID checks for following operations.
+ * @return Static list index as tag descriptor.
+ */
 int aos_tag_get(int key, int cmd, int perm) {
+    int sem_ret, tag, full = 0;
+    void *search_res;
+    tag_t *new_srv;
+    unsigned int i;
+    unsigned long ins_res;
     // TODO Debug.
     printk(KERN_INFO "%s: tag_get called with (%d, %d, %d).\n", MODNAME,
         key, cmd, perm);
-    return 0;
+    // Consistency check on input arguments.
+    if ((cmd != __TAG_OPEN) && (cmd != __TAG_CREATE)) return -EINVAL;
+    if ((perm != __TAG_ALL) && (perm != __TAG_USR)) return -EINVAL;
+    // Normal operation basically follows one of two paths.
+    if ((cmd == __TAG_OPEN) && (key != __TAG_IPC_PRIVATE)) {
+        // We have been asked to reopen an instance, if it exists.
+        sem_ret = down_read_interruptible(&shared_bst_lock);
+        if (sem_ret == -EINTR) return -EINTR;
+        search_res = splay_int_search(shared_bst, key, SEARCH_DATA);
+        up_read(&shared_bst_lock);
+        if (search_res == NULL) return -ENOKEY;
+        return (int)search_res;
+    }
+    if (cmd == __TAG_CREATE) {
+        // We have been asked to create a new instance.
+        if (key != __TAG_IPC_PRIVATE) {
+            // We have been asked to create a new shared instance.
+            // We gotta lock the BST and look for the key first.
+            sem_ret = down_write_killable(&shared_bst_lock);
+            if (sem_ret == -EINTR) return -EINTR;
+            search_res = splay_int_search(shared_bst, key, SEARCH_DATA);
+            if (search_res != NULL) {
+                // Key already exists: exit.
+                up_write(&shared_bst_lock);
+                return -EALREADY;
+            }
+            // At this point we must hold the lock until done.
+        }
+        tag = TAG_NEXT(tags_mask, full);
+        if (full) {
+            // System is full: we can't add a new instance.
+            if (key != __TAG_IPC_PRIVATE) up_write(&shared_bst_lock);
+            return -ENOMEM;
+        }
+        // Allocate and initialize a new instance struct.
+        new_srv = (tag_t *)kzalloc(sizeof(tag_t), GFP_KERNEL);
+        if (unlikely(new_srv == NULL)) {
+            if (key != __TAG_IPC_PRIVATE) up_write(&shared_bst_lock);
+            return -ENOMEM;
+        }
+        new_srv->key = key;
+        for (i = 0; i < __NR_LEVELS; i++) {
+            mutex_init(&((new_srv->snd_locks)[i]));
+            init_waitqueue_head(&((new_srv->lvl_queues)[i][0]));
+            init_waitqueue_head(&((new_srv->lvl_queues)[i][1]));
+            TAG_COND_INIT(&((new_srv->lvl_conds)[i]));
+        }
+        if (perm == __TAG_USR) {
+            new_srv->perm_check = 0x1;
+            new_srv->creator_euid = current_euid();
+        }
+        mutex_init(&(new_srv->awake_all_lock));
+        TAG_COND_INIT(&(new_srv->globl_cond));
+        // Add the new instance struct pointer to the static list.
+        sem_ret = down_write_killable(&(tags_list[tag].rcv_rwsem));
+        if (sem_ret == -EINTR) {
+            if (key != __TAG_IPC_PRIVATE) up_write(&shared_bst_lock);
+            kfree(new_srv);
+            TAG_CLR(tags_mask, tag);
+            return -EINTR;
+        }
+        sem_ret = down_write_killable(&(tags_list[tag].snd_rwsem));
+        if (sem_ret == -EINTR) {
+            up_write(&(tags_list[tag].rcv_rwsem));
+            if (key != __TAG_IPC_PRIVATE) up_write(&shared_bst_lock);
+            kfree(new_srv);
+            TAG_CLR(tags_mask, tag);
+            return -EINTR;
+        }
+        tags_list[tag].ptr = new_srv;
+        up_write(&(tags_list[tag].snd_rwsem));
+        up_write(&(tags_list[tag].rcv_rwsem));
+        if (key != __TAG_IPC_PRIVATE) {
+            // Now we make the modification visible by adding the new entry to
+            // the BST.
+            ins_res = splay_int_insert(shared_bst, key, (void *)tag);
+            if (unlikely(ins_res == 0)) {
+                // Insertion in the BST failed.
+                // Now this is bad: we have to undo all that we just did.
+                // Given how bad this is we don't admit interruptions.
+                down_write(&(tags_list[tag].rcv_rwsem));
+                down_write(&(tags_list[tag].snd_rwsem));
+                tags_list[tag].ptr = NULL;
+                up_write(&(tags_list[tag].snd_rwsem));
+                up_write(&(tags_list[tag].rcv_rwsem));
+                kfree(new_srv);
+                TAG_CLR(tags_mask, tag);
+                up_write(&shared_bst_lock);
+                return -ENOMEM;
+            }
+            up_write(&shared_bst_lock);
+        }
+        return tag;
+    }
+    return -EINVAL;
 }
 
 int aos_tag_rcv(int tag, int lvl, char *buf, size_t size) {
