@@ -159,7 +159,7 @@ int init_module(void) {
     if (unlikely(tags_mask == NULL)) {
         printk(KERN_ERR "%s: Failed to create tags bitmask.\n", MODNAME);
         module_put(scth_mod);
-        delete_splay_int_tree(shared_bst, 0);
+        delete_splay_int_tree(shared_bst);
         return -ENOMEM;
     }
     // Create the tags list.
@@ -167,7 +167,7 @@ int init_module(void) {
     if (unlikely(tags_list == NULL)) {
         printk(KERN_ERR "%s: Failed to create tags list.\n", MODNAME);
         module_put(scth_mod);
-        delete_splay_int_tree(shared_bst, 0);
+        delete_splay_int_tree(shared_bst);
         TAG_MASK_FREE(tags_mask);
         return -ENOMEM;
     }
@@ -188,7 +188,7 @@ int init_module(void) {
         (tag_ctl_nr == -1)) {
         printk(KERN_ERR "%s: Failed to install system calls.\n", MODNAME);
         module_put(scth_mod);
-        delete_splay_int_tree(shared_bst, 0);
+        delete_splay_int_tree(shared_bst);
         TAG_MASK_FREE(tags_mask);
         kfree(tags_list);
         // TODO Device driver stuff.
