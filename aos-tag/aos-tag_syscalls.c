@@ -70,7 +70,7 @@ int aos_tag_get(int key, int cmd, int perm) {
     unsigned int i;
     unsigned long ins_res;
     // TODO Debug.
-    printk(KERN_INFO "%s: tag_get called with (%d, %d, %d).\n",
+    printk(KERN_INFO "%s: tag_get: Called with (%d, %d, %d).\n",
         MODNAME, key, cmd, perm);
     // Consistency check on input arguments.
     if ((cmd != __TAG_OPEN) && (cmd != __TAG_CREATE)) return -EINVAL;
@@ -182,20 +182,20 @@ int aos_tag_get(int key, int cmd, int perm) {
 
 int aos_tag_rcv(int tag, int lvl, char *buf, size_t size) {
     // TODO Debug.
-    printk(KERN_INFO "%s: tag_receive called with (%d, %d, 0x%px, %lu).\n",
+    printk(KERN_INFO "%s: tag_receive: Called with (%d, %d, 0x%px, %lu).\n",
         MODNAME, tag, lvl, buf, size);
     return 0;
 }
 
 int aos_tag_snd(int tag, int lvl, char *buf, size_t size) {
     // TODO Debug.
-    printk(KERN_INFO "%s: tag_send called with (%d, %d, 0x%px, %lu).\n",
+    printk(KERN_INFO "%s: tag_send: Called with (%d, %d, 0x%px, %lu).\n",
         MODNAME, tag, lvl, buf, size);
     return 0;
 }
 
 int aos_tag_ctl(int tag, int cmd) {
     // TODO Debug.
-    printk(KERN_INFO "%s: tag_ctl called with (%d, %d).\n", MODNAME, tag, cmd);
+    printk(KERN_INFO "%s: tag_ctl: Called with (%d, %d).\n", MODNAME, tag, cmd);
     return 0;
 } 
