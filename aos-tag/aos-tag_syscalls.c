@@ -82,12 +82,16 @@ int aos_tag_get(int key, int cmd, int perm) {
         if (sem_ret == -EINTR) return -EINTR;
         search_res =
             (SplayIntNode *)splay_int_search(shared_bst, key);
+        if (search_res == NULL) {
+            up_read(&shared_bst_lock);
+            return -ENOKEY;
+        }
+        tag = search_res->_data;
+        asm volatile ("lfence" ::: "memory");
         up_read(&shared_bst_lock);
-        if (search_res == NULL) return -ENOKEY;
         // TODO Debug.
-        printk(KERN_DEBUG "%s: tag_get: Requested key: %d.\n",
-            MODNAME, search_res->_data);
-        return search_res->_data;
+        printk(KERN_DEBUG "%s: tag_get: Requested key: %d.\n", MODNAME, tag);
+        return tag;
     }
     if (cmd == __TAG_CREATE) {
         // We have been asked to create a new instance.
@@ -147,6 +151,7 @@ int aos_tag_get(int key, int cmd, int perm) {
             return -EINTR;
         }
         tags_list[tag].ptr = new_srv;
+        asm volatile ("sfence" ::: "memory");
         up_write(&(tags_list[tag].snd_rwsem));
         up_write(&(tags_list[tag].rcv_rwsem));
         if (key != __TAG_IPC_PRIVATE) {
@@ -161,6 +166,7 @@ int aos_tag_get(int key, int cmd, int perm) {
                 down_write(&(tags_list[tag].rcv_rwsem));
                 down_write(&(tags_list[tag].snd_rwsem));
                 tags_list[tag].ptr = NULL;
+                asm volatile ("sfence" ::: "memory");
                 up_write(&(tags_list[tag].snd_rwsem));
                 up_write(&(tags_list[tag].rcv_rwsem));
                 kfree(new_srv);
