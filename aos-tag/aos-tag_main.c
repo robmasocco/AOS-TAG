@@ -233,6 +233,6 @@ void cleanup_module(void) {
     }
     kfree(tags_list);
     TAG_MASK_FREE(tags_mask);
-    delete_splay_int_tree(shared_bst, 0);
+    delete_splay_int_tree(shared_bst);
     printk(KERN_INFO "%s: Shutdown...\n", MODNAME);
 }

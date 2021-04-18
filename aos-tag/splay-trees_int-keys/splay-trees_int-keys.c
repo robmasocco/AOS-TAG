@@ -31,10 +31,11 @@
 
 #include "splay-trees_int-keys.h"
 
+/* In userspace I'd get this from limits.h. */
 #define __ULONG_MAX 18446744073709551615UL
 
 /* Internal library subroutines declarations. */
-SplayIntNode *_spli_create_node(int new_key, void *new_data);
+SplayIntNode *_spli_create_node(int new_key, int new_data);
 void _spli_delete_node(SplayIntNode *node);
 SplayIntNode *_spli_search_node(SplayIntTree *tree, int key);
 void _spli_insert_left_subtree(SplayIntNode *father, SplayIntNode *new_son);
@@ -65,30 +66,26 @@ SplayIntTree *create_splay_int_tree(void) {
 }
 
 /**
- * Frees a given Splay Tree. Using options defined in the header, 
- * it's possible to specify whether also data has to be freed or not.
+ * Frees a given Splay Tree.
  *
  * @param tree Pointer to the tree to free.
- * @param opts Options to configure the deletion behaviour (see header).
  * @return 0 if all went well, or -1 if input args were bad.
  */
-int delete_splay_int_tree(SplayIntTree *tree, int opts) {
+int delete_splay_int_tree(SplayIntTree *tree) {
     SplayIntNode **nodes;
     unsigned long int i;
     // Sanity check on input arguments.
-    if ((tree == NULL) || (opts < 0)) return -1;
+    if (tree == NULL) return -1;
     // If the tree is empty free it directly.
     if (tree->_root == NULL) {
         kfree(tree);
         return 0;
     }
-    // Do a BFS to get all the nodes (less taxing on memory than a DFS).
+    // Do a BFS to get all the nodes.
     nodes = (SplayIntNode **)splay_int_bfs(tree, BFS_LEFT_FIRST, SEARCH_NODES);
-    // Free the nodes and eventually their data.
-    for (i = 0; i < tree->nodes_count; i++) {
-        if (opts & DELETE_FREE_DATA) kfree((*(nodes[i]))._data);
+    // Free the nodes.
+    for (i = 0; i < tree->nodes_count; i++)
         _spli_delete_node(nodes[i]);
-    }
     // Free the nodes array and the tree, and that's it!
     kfree(nodes);
     kfree(tree);
@@ -100,17 +97,13 @@ int delete_splay_int_tree(SplayIntTree *tree, int opts) {
  *
  * @param tree Tree to search into.
  * @param key Key to look for.
- * @param opts Configures the behaviour of the search operation (see header).
- * @return Data stored in a node (if any) or pointer to the node (if any).
+ * @return Pointer to the node (if any).
  */
-void *splay_int_search(SplayIntTree *tree, int key, int opts) {
+SplayIntNode *splay_int_search(SplayIntTree *tree, int key) {
     SplayIntNode *searched_node;
-    if ((opts <= 0) || (tree == NULL)) return NULL;  // Sanity check.
+    if (tree == NULL) return NULL;  // Sanity check.
     searched_node = _spli_search_node(tree, key);
-    if (searched_node == NULL) return NULL;
-    if (opts & SEARCH_DATA) return searched_node->_data;
-    if (opts & SEARCH_NODES) return (void *)searched_node;
-    return NULL;
+    return searched_node;
 }
 
 /**
@@ -118,13 +111,12 @@ void *splay_int_search(SplayIntTree *tree, int key, int opts) {
  *
  * @param tree Pointer to the tree to delete from.
  * @param key Key to delete from the dictionary.
- * @param opts Also willing to free the stored data?
  * @return 1 if found and deleted, 0 if not found or input args were bad.
  */
-int splay_int_delete(SplayIntTree *tree, int key, int opts) {
+int splay_int_delete(SplayIntTree *tree, int key) {
     SplayIntNode *to_delete;
     // Sanity check on input arguments.
-    if ((opts < 0) || (tree == NULL)) return 0;
+    if (tree == NULL) return 0;
     to_delete = _spli_search_node(tree, key);
     if (to_delete != NULL) {
         SplayIntNode *left_sub, *right_sub;
@@ -135,8 +127,7 @@ int splay_int_delete(SplayIntTree *tree, int key, int opts) {
         left_sub = _spli_cut_left_subtree(to_delete);
         right_sub = _spli_cut_right_subtree(to_delete);
         tree->_root = _spli_join(left_sub, right_sub);
-        // Apply eventual options to free keys and data, then free the node.
-        if (opts & DELETE_FREE_DATA) kfree(to_delete->_data);
+        // Free the node.
         kfree(to_delete);
         tree->nodes_count--;
         return 1;  // Found and deleted.
@@ -152,7 +143,7 @@ int splay_int_delete(SplayIntTree *tree, int key, int opts) {
  * @param new_data New data to store into the dictionary.
  * @return Internal nodes counter after the insertion, or 0 if full/bad args.
  */
-ulong splay_int_insert(SplayIntTree *tree, int new_key, void *new_data) {
+ulong splay_int_insert(SplayIntTree *tree, int new_key, int new_data) {
     SplayIntNode *new_node;
     if (tree == NULL) return 0;  // Sanity check.
     if (tree->nodes_count == tree->max_nodes) return 0;  // The tree is full.
@@ -191,13 +182,15 @@ ulong splay_int_insert(SplayIntTree *tree, int new_key, void *new_data) {
  * visited first). 
  * Depending on the option specified, returns an array of: 
  * - Pointers to the nodes. 
- * - Keys. 
  * - Data. 
  * See the header for the definitions of such options. 
  * Remember to free the returned array afterwards! 
  * NOTE: In this work, we'll use this function only to delete the whole tree, 
  *       so some stuff from the original implementation is missing.
- * 
+ *       Also, the SEARCH_DATA option will probably never be used, but in 
+ *       such case we'd have a result array of double the necessary size, 
+ *       because the search works in-place.
+ *
  * @param tree Pointer to the tree to operate on.
  * @param type Type of BFS to perform (see header).
  * @param opts Type of data to return (see header).
@@ -215,7 +208,7 @@ void **splay_int_bfs(SplayIntTree *tree, int type, int opts) {
         bfs_res = kzalloc((tree->nodes_count) * sizeof(void *), GFP_KERNEL);
     } else if (opts & SEARCH_NODES) {
         bfs_res = kzalloc((tree->nodes_count) * sizeof(SplayIntNode *),
-                           GFP_KERNEL);
+                          GFP_KERNEL);
     } else return NULL;  // Invalid option.
     if (bfs_res == NULL) return NULL;
     int_ptr = bfs_res + 1;
@@ -260,7 +253,7 @@ void **splay_int_bfs(SplayIntTree *tree, int type, int opts) {
  * @param new_data Data to add.
  * @return Pointer to a new node, or NULL if allocation failed.
  */
-SplayIntNode *_spli_create_node(int new_key, void *new_data) {
+SplayIntNode *_spli_create_node(int new_key, int new_data) {
     SplayIntNode *new_node;
     new_node = (SplayIntNode *)kmalloc(sizeof(SplayIntNode), GFP_KERNEL);
     if (new_node == NULL) return NULL;
@@ -375,9 +368,9 @@ SplayIntNode *_spli_search_node(SplayIntTree *tree, int key) {
  */
 void _spli_swap_info(SplayIntNode *node1, SplayIntNode *node2) {
     int key1 = node1->_key;
-    void *data1 = node1->_data;
+    int data1 = node1->_data;
     int key2 = node2->_key;
-    void *data2 = node2->_data;
+    int data2 = node2->_data;
     node1->_key = key2;
     node2->_key = key1;
     node1->_data = data2;
@@ -460,8 +453,8 @@ SplayIntNode *_spli_splay(SplayIntNode *node) {
         }
         if ((father_node->_right_son == node) &&
             (grand_node->_right_son == father_node)) {
-            // Case 3: Both nodes are right sons. Watch out for content swaps!
-            // Perform two left rotations.
+            // Case 3: Both nodes are right sons.
+            // Perform two left rotations. Watch out for content swaps!
             _spli_left_rotation(grand_node);
             _spli_left_rotation(grand_node);
         }

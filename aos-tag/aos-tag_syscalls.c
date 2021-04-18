@@ -81,13 +81,13 @@ int aos_tag_get(int key, int cmd, int perm) {
         sem_ret = down_read_killable(&shared_bst_lock);
         if (sem_ret == -EINTR) return -EINTR;
         search_res =
-            (SplayIntNode *)splay_int_search(shared_bst, key, SEARCH_NODES);
+            (SplayIntNode *)splay_int_search(shared_bst, key);
         up_read(&shared_bst_lock);
         if (search_res == NULL) return -ENOKEY;
         // TODO Debug.
         printk(KERN_DEBUG "%s: tag_get: Requested key: %d.\n",
-            MODNAME, (int)(search_res->_data));
-        return (int)(search_res->_data);
+            MODNAME, search_res->_data);
+        return search_res->_data;
     }
     if (cmd == __TAG_CREATE) {
         // We have been asked to create a new instance.
@@ -97,7 +97,7 @@ int aos_tag_get(int key, int cmd, int perm) {
             sem_ret = down_write_killable(&shared_bst_lock);
             if (sem_ret == -EINTR) return -EINTR;
             search_res =
-                (SplayIntNode *)splay_int_search(shared_bst, key, SEARCH_NODES);
+                (SplayIntNode *)splay_int_search(shared_bst, key);
             if (search_res != NULL) {
                 // Key already exists: exit.
                 up_write(&shared_bst_lock);
@@ -152,7 +152,7 @@ int aos_tag_get(int key, int cmd, int perm) {
         if (key != __TAG_IPC_PRIVATE) {
             // Now we make the modification visible by adding the new entry to
             // the BST.
-            ins_res = splay_int_insert(shared_bst, key, (void *)tag);
+            ins_res = splay_int_insert(shared_bst, key, tag);
             if (unlikely(ins_res == 0)) {
                 // Insertion in the BST failed.
                 // Now this is bad: we have to undo all that we just did.

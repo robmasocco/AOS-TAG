@@ -32,19 +32,14 @@
 /**
  * This code is a kernel-side rework of my repository splay-trees_c.
  * It lacks many unnecessary things and does others differently.
+ * To avoid complaints from GCC, node data is forced to int to match our
+ * use case.
  */
 
 #ifndef _SPLAYTREES_INTEGERKEYS_H
 #define _SPLAYTREES_INTEGERKEYS_H
 
 typedef unsigned long int ulong;
-
-/**
- * These options can be OR'd in a call to the delete functions to specify
- * if also the keys and/or the data in the nodes must be freed.
- * If nothing is specified, only the nodes are freed.
- */
-#define DELETE_FREE_DATA 0x1
 
 /**
  * These options can be specified to tell the search functions what data to
@@ -70,11 +65,6 @@ typedef unsigned long int ulong;
  * A Splay Tree's node stores pointers to its "father" node and to its sons.
  * Since we're using the "splay" heuristic, no balance information is stored.
  * In this implementation, integers are used as keys in the dictionary.
- * The data kept inside the node can be everything, as long as it's at most
- * sizeof(void *)-wide. Could be e.g. pointers.
- * Note that, as per the deletion options, is not possible to have only SOME
- * dynamic data: either all or none, so think about the data you're
- * providing to these functions.
  * NOTE: In this implementation, we try to align nodes to cache lines in order
  *       to optimize accesses using hot cache lines and the splay tree behaviour
  *       during searches.
@@ -84,7 +74,7 @@ struct _splay_int_node {
     struct _splay_int_node *_left_son;
     struct _splay_int_node *_right_son;
     int _key;
-    void *_data;
+    int _data;
 } __attribute__((aligned(X86_CACHE_LINE_SZ)));
 typedef struct _splay_int_node SplayIntNode;
 
@@ -93,8 +83,7 @@ typedef struct _splay_int_node SplayIntNode;
  * track of the number of nodes in the structure, to get an idea of its "size"
  * and be able to efficiently perform searches.
  * Splay trees implemented like this have a size limit set by the maximum
- * amount representable with an unsigned long integer, automatically set (as
- * long as you compile this code on the same machine you're going to use it on).
+ * amount representable with an unsigned long integer.
  * NOTE: In this implementation, we try to align trees to cache lines in order
  *       to optimize accesses using hot cache lines during searches.
  */
@@ -106,10 +95,10 @@ typedef struct {
 
 /* Library functions. */
 SplayIntTree *create_splay_int_tree(void);
-int delete_splay_int_tree(SplayIntTree *tree, int opts);
-void *splay_int_search(SplayIntTree *tree, int key, int opts);
-ulong splay_int_insert(SplayIntTree *tree, int new_key, void *new_data);
-int splay_int_delete(SplayIntTree *tree, int key, int opts);
+int delete_splay_int_tree(SplayIntTree *tree);
+SplayIntNode *splay_int_search(SplayIntTree *tree, int key);
+ulong splay_int_insert(SplayIntTree *tree, int new_key, int new_data);
+int splay_int_delete(SplayIntTree *tree, int key);
 void **splay_int_bfs(SplayIntTree *tree, int type, int opts);
 
 #endif
