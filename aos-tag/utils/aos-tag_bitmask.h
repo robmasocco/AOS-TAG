@@ -122,10 +122,11 @@ typedef struct _tag_bitmask {
 #define TAG_SET(tag_mask, tag)                                               \
     do {                                                                     \
         unsigned int ulong_indx, bit_indx, tag_desc;                         \
+        unsigned long tag_ulong;                                             \
         tag_desc = (unsigned int)(tag);                                      \
         ulong_indx = tag_desc / (sizeof(unsigned long) * 8);                 \
         bit_indx = tag_desc - (ulong_indx * (sizeof(unsigned long) * 8));    \
-        unsigned long tag_ulong = ((tag_mask)->_mask)[ulong_indx];           \
+        tag_ulong = ((tag_mask)->_mask)[ulong_indx];                         \
         tag_ulong |= (0x1UL << bit_indx);                                    \
         ((tag_mask)->_mask)[ulong_indx] = tag_ulong;                         \
         asm volatile ("sfence" ::: "memory");                                \
@@ -155,11 +156,12 @@ typedef struct _tag_bitmask {
 #define TAG_CLR(tag_mask, tag)                                               \
     do {                                                                     \
         unsigned int ulong_indx, bit_indx, tag_desc;                         \
+        unsigned long tag_ulong;                                             \
         tag_desc = (unsigned int)(tag);                                      \
         ulong_indx = tag_desc / (sizeof(unsigned long) * 8);                 \
         bit_indx = tag_desc - (ulong_indx * (sizeof(unsigned long) * 8));    \
         spin_lock(&((tag_mask)->_lock));                                     \
-        unsigned long tag_ulong = ((tag_mask)->_mask)[ulong_indx];           \
+        tag_ulong = ((tag_mask)->_mask)[ulong_indx];                         \
         tag_ulong &= (~0x0UL) ^ (0x1UL << bit_indx);                         \
         ((tag_mask)->_mask)[ulong_indx] = tag_ulong;                         \
         asm volatile ("sfence" ::: "memory");                                \
@@ -209,9 +211,9 @@ typedef struct _tag_bitmask {
     mask_len = (tag_mask)->_mask_len;                                        \
     nr_tags = (tag_mask)->_nr_tags;                                          \
     for (i = 0; i < mask_len; i++) {                                         \
+        unsigned int j;                                                      \
         unsigned long curr_ulong;                                            \
         curr_ulong = ((tag_mask)->_mask)[i];                                 \
-        unsigned int j;                                                      \
         for (j = 0; j < (sizeof(unsigned long) * 8); j++) {                  \
             if ((j + (i * sizeof(unsigned long) * 8)) >= nr_tags) break;     \
             if (!(curr_ulong & (0x1UL << j))) {                              \
