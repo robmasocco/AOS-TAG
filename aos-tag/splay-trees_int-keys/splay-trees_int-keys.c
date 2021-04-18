@@ -188,8 +188,8 @@ ulong splay_int_insert(SplayIntTree *tree, int new_key, int new_data) {
  * NOTE: In this work, we'll use this function only to delete the whole tree, 
  *       so some stuff from the original implementation is missing.
  *       Also, the SEARCH_DATA option will probably never be used, but in 
- *       such case we'd have a result array of double the necessary size, 
- *       because the search works in-place.
+ *       such case we'd have a result array of long ints instead of ints, 
+ *       because the search has to work in-place.
  *
  * @param tree Pointer to the tree to operate on.
  * @param type Type of BFS to perform (see header).
@@ -218,7 +218,11 @@ void **splay_int_bfs(SplayIntTree *tree, int type, int opts) {
     for (i = 0; i < tree->nodes_count; i++) {
         curr = (SplayIntNode *)bfs_res[i];
         // Visit the current node.
-        if (opts & SEARCH_DATA) bfs_res[i] = curr->_data;
+        if (opts & SEARCH_DATA) {
+            long int damn_you_gcc;
+            damn_you_gcc = (long int)(curr->_data);
+            bfs_res[i] = (void *)(damn_you_gcc);
+        }
         if (opts & SEARCH_NODES) bfs_res[i] = curr;
         // Eventually add the sons to the array, to be visited afterwards.
         if (type & BFS_LEFT_FIRST) {

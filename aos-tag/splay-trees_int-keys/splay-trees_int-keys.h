@@ -85,7 +85,7 @@ typedef struct _splay_int_node SplayIntNode;
  * Splay trees implemented like this have a size limit set by the maximum
  * amount representable with an unsigned long integer.
  * NOTE: In this implementation, we try to align trees to cache lines in order
- *       to optimize accesses using hot cache lines during searches.
+ *       to optimize accesses during searches.
  */
 typedef struct {
     SplayIntNode *_root;
