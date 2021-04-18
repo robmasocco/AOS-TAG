@@ -385,7 +385,7 @@ Things are a little bit different when *adding* an instance: at first, the bitma
 
 Also, threads that come from the VFS while doing an *open* must synchronize with *adders* and *removers* to take a snapshot of each instance before it fades away. This can be accomplished by locking the senders rw_sem and checking the instance pointer. Using the receivers one causes a false positive for removers that want to check if no reader is there, this way they'd only have to wait for the snapshot to be taken since these threads deterministically release this rw_sem shortly after.
 
-You may have noticed from the pseudocode above that when each of these two rw_sems gets locked *as writer*, the interruptible variant of the API is used. This is intended because since any thread can request access to any tag entry in the instance array, independently of the instance effectively being active or not and of permissions allowing the following operations on it, there could be some activity on an instance. In the unfortunate (and unlikely, under normal usage) case that such activity is extensive and the call that locks the rw_sems as writer blocks for too much time, it can be aborted with a signal. This is not true for *reader locking* since instance addition and removal are performed very quickly (under normal system load at least).
+You may have noticed from the pseudocode above that when each of these two rw_sems gets locked, the interruptible/killable variant of the API is used. This is intended because since any thread can request access to any tag entry in the instance array, independently of the instance effectively being active or not and of permissions allowing the following operations on it, there could be some activity on an instance. In the unfortunate (and unlikely, under normal usage) case that such activity is extensive and the call that locks the rw_sems as writer blocks for too much time, it can be aborted with a signal. The only case in which this doesn't happen is during critical error-recovery steps, where it's considered more valuable to try to restore the state of the structures before leaving gracefully.
 
 ## POSTING A MESSAGE ON A LEVEL
 
@@ -405,6 +405,8 @@ Full instance wakeups work in a similar fashion, as is clear from the pseudocode
 - Signals, interrupts, preemption and the like checks against deadlocks and similar problems. Remember that wait queues functions return *-ERESTARTSYS* when a signal was delivered. See our little golden screenshot from our course materials to know how signals work (and remember: they're usermode shit, you just return -EINTR).
 - Anything still marked as TODO here.
 - Load and unload scripts, that handle *insmod*, *rmmod* and possibly compilation accordingly.
+- Usermode header file and source file with stubs. Remember to set *errno* to zero before any call!
+- Hide debug audits with preprocessor directives.
 - Remember that we removed the wake-up loop. Check if that is necessary if there's any trouble with wake-ups.
 
 # EXTRAS
