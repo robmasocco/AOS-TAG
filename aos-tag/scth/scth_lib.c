@@ -25,6 +25,7 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/slab.h>
+#include <linux/mutex.h>
 #include <linux/compiler.h>
 
 #include "utils/x86_utils.h"
@@ -83,6 +84,8 @@ module_param(nr_sysnis, int, S_IRUGO);
 MODULE_PARM_DESC(nr_sysnis, "Number of hackable entries in the "
                  "syscall table.");
 
+extern struct mutex scth_lock;
+
 /**
  * Library cleanup routine: restores entries and frees memory.
  */
@@ -90,7 +93,11 @@ void scth_cleanup(void) {
     int i = 0;
     unsigned long flags;
     void **table_addr = (void **)sys_call_table_addr;
-    if (avail_sysnis == NULL) return;
+    mutex_lock(&scth_lock);
+    if (avail_sysnis == NULL) {
+        mutex_unlock(&scth_lock);
+        return;
+    }
     for (; i < nr_sysnis; i++) {
         if (avail_sysnis[i].hacked) {
             __x86_wp_disable(flags);
@@ -102,6 +109,7 @@ void scth_cleanup(void) {
     }
     kfree(avail_sysnis);
     avail_sysnis = NULL;
+    mutex_unlock(&scth_lock);
     printk(KERN_INFO "%s: System call table restored.\n", MODNAME);
 }
 
@@ -116,8 +124,12 @@ int scth_hack(void *new_call_addr) {
     int i = 0, new_call_index;
     unsigned long flags;
     void **table_addr = (void **)sys_call_table_addr;
+    mutex_lock(&scth_lock);
     // Consistency check on input arguments.
-    if (avail_sysnis == NULL) return -1;
+    if (avail_sysnis == NULL) {
+        mutex_unlock(&scth_lock);
+        return -1;
+    }
     for (; i < nr_sysnis; i++) {
         if (!(avail_sysnis[i].hacked)) {
             new_call_index = avail_sysnis[i].tab_index;
@@ -126,9 +138,11 @@ int scth_hack(void *new_call_addr) {
             __x86_wp_enable(flags);
             avail_sysnis[i].hacked = 1;
             printk(KERN_INFO "%s: Hacked entry %d.\n", MODNAME, new_call_index);
+            mutex_unlock(&scth_lock);
             return new_call_index;
         }
     }
+    mutex_unlock(&scth_lock);
     return -1;
 }
 
@@ -141,8 +155,12 @@ void scth_unhack(int to_restore) {
     int i = 0;
     unsigned long flags;
     void **table_addr = (void **)sys_call_table_addr;
+    mutex_lock(&scth_lock);
     // Consistency check on input arguments.
-    if ((to_restore < 0) || (avail_sysnis == NULL)) return;
+    if ((to_restore < 0) || (avail_sysnis == NULL)) {
+        mutex_unlock(&scth_lock);
+        return;
+    }
     for (; i < nr_sysnis; i++) {
         if ((avail_sysnis[i].tab_index == to_restore) &&
             avail_sysnis[i].hacked) {
@@ -150,10 +168,12 @@ void scth_unhack(int to_restore) {
             __x86_wp_disable(flags);
             table_addr[to_restore] = (void *)sys_ni_syscall_addr;
             __x86_wp_enable(flags);
+            mutex_unlock(&scth_lock);
             printk(KERN_INFO "%s: Restored entry %d.\n", MODNAME, to_restore);
             return;
         }
     }
+    mutex_unlock(&scth_lock);
 }
 
 /**

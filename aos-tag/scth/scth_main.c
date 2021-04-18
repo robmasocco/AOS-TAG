@@ -28,6 +28,7 @@
 
 #include <linux/kernel.h>
 #include <linux/module.h>
+#include <linux/mutex.h>
 #include <linux/errno.h>
 #include <linux/version.h>
 
@@ -41,6 +42,9 @@
 #endif
 
 extern int nr_sysnis;
+
+/* This ensures that operations on the Table are performed atomically. */
+DEFINE_MUTEX(scth_lock);
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Roberto Masocco <robmasocco@gmail.com>");
