@@ -65,25 +65,29 @@ extern tag_bitmask *tags_mask;
  */
 int aos_tag_get(int key, int cmd, int perm) {
     int sem_ret, tag, full = 0;
-    void *search_res;
+    SplayIntNode *search_res;
     tag_t *new_srv;
     unsigned int i;
     unsigned long ins_res;
     // TODO Debug.
-    printk(KERN_INFO "%s: tag_get called with (%d, %d, %d).\n", MODNAME,
-        key, cmd, perm);
+    printk(KERN_INFO "%s: tag_get called with (%d, %d, %d).\n",
+        MODNAME, key, cmd, perm);
     // Consistency check on input arguments.
     if ((cmd != __TAG_OPEN) && (cmd != __TAG_CREATE)) return -EINVAL;
     if ((perm != __TAG_ALL) && (perm != __TAG_USR)) return -EINVAL;
     // Normal operation basically follows one of two paths.
     if ((cmd == __TAG_OPEN) && (key != __TAG_IPC_PRIVATE)) {
         // We have been asked to reopen an instance, if it exists.
-        sem_ret = down_read_interruptible(&shared_bst_lock);
+        sem_ret = down_read_killable(&shared_bst_lock);
         if (sem_ret == -EINTR) return -EINTR;
-        search_res = splay_int_search(shared_bst, key, SEARCH_DATA);
+        search_res =
+            (SplayIntNode *)splay_int_search(shared_bst, key, SEARCH_NODES);
         up_read(&shared_bst_lock);
         if (search_res == NULL) return -ENOKEY;
-        return (int)search_res;
+        // TODO Debug.
+        printk(KERN_DEBUG "%s: tag_get: Requested key: %d.\n",
+            MODNAME, (int)(search_res->_data));
+        return (int)(search_res->_data);
     }
     if (cmd == __TAG_CREATE) {
         // We have been asked to create a new instance.
@@ -92,7 +96,8 @@ int aos_tag_get(int key, int cmd, int perm) {
             // We gotta lock the BST and look for the key first.
             sem_ret = down_write_killable(&shared_bst_lock);
             if (sem_ret == -EINTR) return -EINTR;
-            search_res = splay_int_search(shared_bst, key, SEARCH_DATA);
+            search_res =
+                (SplayIntNode *)splay_int_search(shared_bst, key, SEARCH_NODES);
             if (search_res != NULL) {
                 // Key already exists: exit.
                 up_write(&shared_bst_lock);
@@ -163,7 +168,12 @@ int aos_tag_get(int key, int cmd, int perm) {
                 return -ENOMEM;
             }
             up_write(&shared_bst_lock);
+            // TODO Debug.
+            printk(KERN_DEBUG "%s: tag_get: Insert returned: %lu.\n",
+                MODNAME, ins_res);
         }
+        // TODO Debug.
+        printk(KERN_DEBUG "%s: tag_get: New tag: %d.\n", MODNAME, tag);
         return tag;
     }
     return -EINVAL;
