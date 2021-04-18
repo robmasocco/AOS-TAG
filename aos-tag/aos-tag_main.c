@@ -29,6 +29,7 @@
 #include <linux/rwsem.h>
 #include <linux/errno.h>
 #include <linux/version.h>
+#include <linux/compiler.h>
 
 #include "scth/include/scth.h"
 
@@ -148,14 +149,14 @@ int init_module(void) {
     mutex_unlock(&module_mutex);
     // Create BST dictionary.
     shared_bst = create_splay_int_tree();
-    if (shared_bst == NULL) {
+    if (unlikely(shared_bst == NULL)) {
         printk(KERN_ERR "%s: Failed to create BST dictionary.\n", MODNAME);
         module_put(scth_mod);
         return -ENOMEM;
     }
     // Create the tags bitmask.
     tags_mask = TAG_MASK_CREATE(max_tags);
-    if (tags_mask == NULL) {
+    if (unlikely(tags_mask == NULL)) {
         printk(KERN_ERR "%s: Failed to create tags bitmask.\n", MODNAME);
         module_put(scth_mod);
         delete_splay_int_tree(shared_bst, 0);
@@ -163,7 +164,7 @@ int init_module(void) {
     }
     // Create the tags list.
     tags_list = (tag_ptr_t *)kzalloc(sizeof(tag_ptr_t) * max_tags, GFP_KERNEL);
-    if (tags_list == NULL) {
+    if (unlikely(tags_list == NULL)) {
         printk(KERN_ERR "%s: Failed to create tags list.\n", MODNAME);
         module_put(scth_mod);
         delete_splay_int_tree(shared_bst, 0);
