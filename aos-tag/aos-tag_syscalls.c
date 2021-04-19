@@ -168,9 +168,11 @@ int aos_tag_get(int key, int cmd, int perm) {
                 // Insertion in the BST failed.
                 // Now this is bad: we have to undo all that we just did,
                 // but we released locks.
+                // We try to reacquire them and do this gracefully.
                 int sem_ret1 = 0, sem_ret2 = 0;
                 sem_ret1 = down_write_killable(&(tags_list[tag].rcv_rwsem));
-                sem_ret2 = down_write_killable(&(tags_list[tag].snd_rwsem));
+                if (sem_ret1 != -EINTR)
+                    sem_ret2 = down_write_killable(&(tags_list[tag].snd_rwsem));
                 tags_list[tag].ptr = NULL;
                 asm volatile ("sfence" ::: "memory");
                 if (sem_ret1 != -EINTR) up_write(&(tags_list[tag].snd_rwsem));
