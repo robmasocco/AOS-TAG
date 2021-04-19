@@ -25,6 +25,7 @@
 #include <linux/module.h>
 #include <linux/types.h>
 #include <linux/slab.h>
+#include <linux/uaccess.h>
 #include <linux/rwsem.h>
 #include <linux/wait.h>
 #include <linux/mutex.h>
@@ -144,7 +145,7 @@ int aos_tag_get(int key, int cmd, int perm) {
                    MODNAME);
             printk(KERN_CRIT "%s: Module state corrupted, please remove.\n",
                    MODNAME);
-            return -EINTR;
+            return -ENOTRECOVERABLE;
         }
         if (unlikely(down_write_killable(&(tags_list[tag].snd_rwsem))
             == -EINTR)) {
@@ -155,7 +156,7 @@ int aos_tag_get(int key, int cmd, int perm) {
                    MODNAME);
             printk(KERN_CRIT "%s: Module state corrupted, please remove.\n",
                    MODNAME);
-            return -EINTR;
+            return -ENOTRECOVERABLE;
         }
         tags_list[tag].ptr = new_srv;
         asm volatile ("sfence" ::: "memory");
@@ -185,7 +186,7 @@ int aos_tag_get(int key, int cmd, int perm) {
                            "failed BST insert.\n", MODNAME);
                     printk(KERN_CRIT "%s: Module state corrupted, please "
                            "remove.\n", MODNAME);
-                    return -EINTR;
+                    return -ENOTRECOVERABLE;
                 }
                 TAG_CLR(tags_mask, tag);
                 return -ENOMEM;
@@ -201,10 +202,101 @@ int aos_tag_get(int key, int cmd, int perm) {
     return -EINVAL;
 }
 
+/**
+ * Allows a thread to receive a message from a level of an instance. 
+ * The instance should have been previously opened with tag_get, however 
+ * presence and permissions checks are always performed. 
+ * The userspace buffer provided must be large enough to store the new message.
+ *
+ * @param tag Tag descriptor of the instance to access.
+ * @param lvl Level of the aforementioned instance to receive from.
+ * @param buf Userspace buffer in which to copy the new message.
+ * @param size Size of the aforementioned buffer.
+ * @return 0 if the message was successfully copied, or an error code for errno.
+ */
 int aos_tag_rcv(int tag, int lvl, char *buf, size_t size) {
+    tag_t *tag_inst;
+    unsigned char lvl_epoch, globl_epoch;
+    int wait_res = 0;
     // TODO Debug.
     printk(KERN_INFO "%s: tag_receive: Called with (%d, %d, 0x%px, %lu).\n",
         MODNAME, tag, lvl, buf, size);
+    // Consistency check on input arguments.
+    if ((tag < 0) || (tag >= max_tags) || (buf == NULL) ||
+        (lvl < 0) || (lvl >= __NR_LEVELS)) return -EINVAL;
+    // First, check if the instance exists and we're allowed to access it.
+    if (down_read_killable(&(tags_list[tag].rcv_rwsem)) == -EINTR)
+        return -EINTR;
+    tag_inst = tags_list[tag].ptr;
+    if (tag_inst == NULL) {
+        // Instance is not there anymore, or yet.
+        up_read(&(tags_list[tag].rcv_rwsem));
+        return -EIDRM;
+    }
+    if (tag_inst->perm_check &&
+        (tag_inst->creator_euid.val != current_euid().val)) {
+        // We're not allowed to receive messages from this instance.
+        up_read(&(tags_list[tag].rcv_rwsem));
+        return -EPERM;
+    }
+    // We're in.
+    // Now let's register for the current local and global wait conditions.
+    lvl_epoch = TAG_COND_REG(&((tag_inst->lvl_conds)[lvl]));
+    globl_epoch = TAG_COND_REG(&(tag_inst->globl_cond));
+    // TODO Debug.
+    printk(KERN_DEBUG "%s: tag_receive: Local epoch: %d, global epoch: %d.\n",
+           MODNAME, lvl_epoch, globl_epoch);
+    // Now we can wait on our level's wait queue, keeping an eye out for both
+    // the local and the global conditions, of the respective epochs.
+    wait_res =
+        wait_event_interruptible((tag_inst->lvl_queues)[lvl][lvl_epoch],
+           ((TAG_COND_VAL(&((tag_inst->lvl_conds)[lvl]), lvl_epoch) == 0x1) ||
+            (TAG_COND_VAL(&(tag_inst->globl_cond), globl_epoch) == 0x1)));
+    // At this point we've been awoken!
+    // Let's check what happened.
+    if (wait_res == -ERESTARTSYS) {
+        // We got a signal.
+        TAG_COND_UNREG(&((tag_inst->lvl_conds)[lvl]), lvl_epoch);
+        TAG_COND_UNREG(&(tag_inst->globl_cond), globl_epoch);
+        up_read(&(tags_list[tag].rcv_rwsem));
+        return -EINTR;
+    }
+    if (TAG_COND_VAL(&(tag_inst->globl_cond), globl_epoch) == 0x1) {
+        // We got hit by an AWAKE_ALL.
+        TAG_COND_UNREG(&((tag_inst->lvl_conds)[lvl]), lvl_epoch);
+        TAG_COND_UNREG(&(tag_inst->globl_cond), globl_epoch);
+        up_read(&(tags_list[tag].rcv_rwsem));
+        // TODO Debug.
+        printk(KERN_DEBUG "%s: tag_receive: Got hit by AWAKE_ALL.\n", MODNAME);
+        return -EINTR;
+    }
+    // If we got here means that there's a message. Let's get to it.
+    TAG_COND_UNREG(&(tag_inst->globl_cond), globl_epoch);
+    if (tag_inst->mgs_sizes[lvl] != 0) {
+        unsigned long not_copied = 0;
+        // Remember that zero-length messages are allowed!
+        // Must only check if the provided buffer is large enough.
+        if (size < tag_inst->mgs_sizes[lvl]) {
+            // Not enough.
+            TAG_COND_UNREG(&((tag_inst->lvl_conds)[lvl]), lvl_epoch);
+            up_read(&(tags_list[tag].rcv_rwsem));
+            return -ENOMEM;
+        }
+        not_copied = copy_to_user(buf, tag_inst->msg_bufs[lvl],
+                                  tag_inst->mgs_sizes[lvl]);
+        if (not_copied != 0) {
+            // copy_to_user failed. Since it shouldn't, this service doesn't
+            // retry, so the operation is aborted.
+            TAG_COND_UNREG(&((tag_inst->lvl_conds)[lvl]), lvl_epoch);
+            up_read(&(tags_list[tag].rcv_rwsem));
+            return -ENOBUFS;
+        }
+    }
+    TAG_COND_UNREG(&((tag_inst->lvl_conds)[lvl]), lvl_epoch);
+    up_read(&(tags_list[tag].rcv_rwsem));
+    // TODO Debug.
+    printk(KERN_DEBUG "%s: tag_receive: Got message from tag: %d, on level "
+           "%d.\n", MODNAME, tag, lvl);
     return 0;
 }
 
@@ -250,8 +342,8 @@ int aos_tag_ctl(int tag, int cmd) {
             up_read(&(tags_list[tag].snd_rwsem));
             return -EIDRM;
         }
-        if ((tag_inst->perm_check) &&
-            (tag_inst->creator_euid.val != current_euid().val)) {
+        if (tag_inst->perm_check &&
+           (tag_inst->creator_euid.val != current_euid().val)) {
             // We're not allowed to operate on this instance.
             up_read(&(tags_list[tag].snd_rwsem));
             return -EPERM;
@@ -273,7 +365,7 @@ int aos_tag_ctl(int tag, int cmd) {
             wake_up_all(&((tag_inst->lvl_queues)[i][0]));
             wake_up_all(&((tag_inst->lvl_queues)[i][1]));
         }
-        // Busy-wait for readers to consume the condition.
+        // Wait for receivers to consume the condition.
         while (TAG_COND_COUNT(&(tag_inst->globl_cond), last_epoch) > 0);
         // All done!
         mutex_unlock(&(tag_inst->awake_all_lock));
@@ -321,7 +413,7 @@ int aos_tag_ctl(int tag, int cmd) {
                        MODNAME);
                 printk(KERN_CRIT "%s: Module state corrupted, please remove.\n",
                        MODNAME);
-                return -EINTR;
+                return -ENOTRECOVERABLE;
             }
             if (!splay_int_delete(shared_bst, tag_inst->key))
                 printk(KERN_ERR "%s: tag_ctl: Couldn't remove key %d, with tag"
