@@ -47,6 +47,9 @@ extern struct rw_semaphore shared_bst_lock;
 extern tag_ptr_t *tags_list;
 extern tag_bitmask *tags_mask;
 
+extern unsigned int max_tags;
+extern unsigned int max_msg_sz;
+
 /**
  * Opens a new instance of the service. 
  * Instances can be shared or not, depending on the value of key. 
@@ -162,9 +165,10 @@ int aos_tag_get(int key, int cmd, int perm) {
                 // Insertion in the BST failed.
                 // Now this is bad: we have to undo all that we just did,
                 // but we released locks.
-                // Given how bad this is we don't admit interruptions.
-                down_write(&(tags_list[tag].rcv_rwsem));
-                down_write(&(tags_list[tag].snd_rwsem));
+                // We admit interruptions only as failsafes.
+                sem_ret = 0;
+                sem_ret = down_write_killable(&(tags_list[tag].rcv_rwsem));
+                sem_ret = down_write_killable(&(tags_list[tag].snd_rwsem));
                 tags_list[tag].ptr = NULL;
                 asm volatile ("sfence" ::: "memory");
                 up_write(&(tags_list[tag].snd_rwsem));
@@ -172,6 +176,7 @@ int aos_tag_get(int key, int cmd, int perm) {
                 kfree(new_srv);
                 TAG_CLR(tags_mask, tag);
                 up_write(&shared_bst_lock);
+                if (sem_ret == -EINTR) return -EINTR;
                 return -ENOMEM;
             }
             up_write(&shared_bst_lock);
@@ -217,17 +222,19 @@ int aos_tag_ctl(int tag, int cmd) {
     int sem_ret;
     tag_t *tag_inst;
     // TODO Debug.
-    printk(KERN_INFO "%s: tag_ctl: Called with (%d, %d).\n", MODNAME, tag, cmd);
+    printk(KERN_DEBUG "%s: tag_ctl: Called with (%d, %d).\n",
+           MODNAME, tag, cmd);
     // Consistency check on input arguments.
-    if ((tag < 0) || ((cmd != __TAG_REMOVE) && (cmd != __TAG_AWAKE_ALL)))
+    if ((tag < 0) || (tag >= max_tags) ||
+        ((cmd != __TAG_REMOVE) && (cmd != __TAG_AWAKE_ALL)))
         return -EINVAL;
     // Execution will follow one of the next paths.
     if (cmd == __TAG_AWAKE_ALL) {
         unsigned char last_epoch;
         unsigned int i;
         // We have been asked to awake all threads waiting on all levels.
-        sem_ret = down_read_killable(&(tags_list[tag].snd_rwsem));
-        if (sem_ret == -EINTR) return -EINTR;
+        if (down_read_killable(&(tags_list[tag].snd_rwsem)) == -EINTR)
+            return -EINTR;
         tag_inst = tags_list[tag].ptr;
         if (tag_inst == NULL) {
             // Instance is not there anymore, or yet.
@@ -241,8 +248,7 @@ int aos_tag_ctl(int tag, int cmd) {
             return -EPERM;
         }
         // Grab the AWAKE_ALL lock to exclude others.
-        sem_ret = mutex_lock_interruptible(&(tag_inst->awake_all_lock));
-        if (sem_ret == -EINTR) {
+        if (mutex_lock_interruptible(&(tag_inst->awake_all_lock)) == -EINTR) {
             up_read(&(tags_list[tag].snd_rwsem));
             return -EINTR;
         }
@@ -266,6 +272,53 @@ int aos_tag_ctl(int tag, int cmd) {
     }
     if (cmd == __TAG_REMOVE) {
         // We have been asked to remove an instance.
+        // But first, check if someone is there, waiting to read.
+        if (down_write_trylock(&(tags_list[tag].rcv_rwsem)) == 0) return -EBUSY;
+        if (down_write_killable(&(tags_list[tag].snd_rwsem)) == -EINTR) {
+            up_write(&(tags_list[tag].rcv_rwsem));
+            return -EINTR;
+        }
+        // We're in. Check if the instance is there and whether we can
+        // access it or not.
+        tag_inst = tags_list[tag].ptr;
+        if (tag_inst == NULL) {
+            up_write(&(tags_list[tag].snd_rwsem));
+            up_write(&(tags_list[tag].rcv_rwsem));
+            return -EIDRM;
+        }
+        if ((tag_inst->perm_check) &&
+            (tag_inst->creator_euid != current_euid())) {
+            up_write(&(tags_list[tag].snd_rwsem));
+            up_write(&(tags_list[tag].rcv_rwsem));
+            return -EPERM;
+        }
+        // We got this. Just disconnect the instance ASAP.
+        tags_list[tag].ptr = NULL;
+        asm volatile ("mfence" ::: "memory");
+        up_write(&(tags_list[tag].snd_rwsem));
+        up_write(&(tags_list[tag].rcv_rwsem));
+        // Ok, now let's cut all references: BST and bitmask.
+        if (tag_inst->key != __TAG_IPC_PRIVATE) {
+            // Remove this key from the BST.
+            if (unlikely(down_write_killable(&shared_bst_lock) == -EINTR)) {
+                // This path exists only as a failsafe.
+                // We try to at least free the memory, but module state will
+                // be left broken.
+                printk(KERN_CRIT "%s: tag_ctl: Killed during BST access.\n",
+                       MODNAME);
+                printk(KERN_CRIT "%s: Module state corrupted, please remove.\n",
+                       MODNAME);
+                kfree(tag_inst);
+                return -EINTR;
+            }
+            if (!splay_int_delete(shared_bst, tag_inst->key))
+                printk(KERN_ERR "%s: tag_ctl: Couldn't remove key %d, with tag"
+                       " %d.\n", MODNAME, tag_inst->key, tag);
+            up_write(&shared_bst_lock);
+        }
+        TAG_CLR(tags_mask, tag);
+        tag_inst->creator_euid = 0;  // For security.
+        kfree(tag_inst);  // Done!
     }
     return 0;
-} 
+}
