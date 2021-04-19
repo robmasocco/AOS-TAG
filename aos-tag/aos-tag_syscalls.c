@@ -28,6 +28,7 @@
 #include <linux/uaccess.h>
 #include <linux/rwsem.h>
 #include <linux/wait.h>
+#include <linux/sched.h>
 #include <linux/mutex.h>
 #include <linux/cred.h>
 #include <linux/errno.h>
@@ -366,7 +367,10 @@ int aos_tag_ctl(int tag, int cmd) {
             wake_up_all(&((tag_inst->lvl_queues)[i][1]));
         }
         // Wait for receivers to consume the condition.
-        while (TAG_COND_COUNT(&(tag_inst->globl_cond), last_epoch) > 0);
+        // Since busy-wait loops are bad in the kernel let the scheduler run
+        // some other task on this CPU in the meantime.
+        while (TAG_COND_COUNT(&(tag_inst->globl_cond), last_epoch) > 0)
+            schedule();
         // All done!
         mutex_unlock(&(tag_inst->awake_all_lock));
         up_read(&(tags_list[tag].snd_rwsem));

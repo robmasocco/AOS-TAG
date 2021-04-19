@@ -159,7 +159,8 @@ Returns 0 if the message was correctly sent, or -1 and *errno* is set to indicat
 - Wake up the current epoch's level wait queue (use *wake_up_all(...)*).
     Note that the APIs used prevent the "Lost wake-up problem".
     Also note that this call grabs the queue spinlock, wakes all readers that "got the message" in a single pass and then releases the queue spinlock. We're sure that all the threads that are in here must be awoken and are those that actually got the message, while those that came too late have been diverted onto the other queue.
-- Busy-wait on the old epoch presence counter to become zero.
+- Wait for the old epoch presence counter to become zero.
+    Busy-wait loops while executing in the kernel are bad, I know. That's why we call *schedule()* in the loop: the current CPU will be released by the task to execute other threads, e.g. the receivers we're waiting for.
 - Set message size to 0 and buffer pointer to NULL (all registered receivers read it at this point). Save it to *kfree* it in a bit.
 - **STORE FENCE**
 - Release level senders mutex.
@@ -197,6 +198,7 @@ Returns 0 if the requested operation was completed successfully, or -1 and *errn
             Note that the APIs used prevent the "Lost wake-up problem".
     - Busy-wait on old global epoch presence counter to become zero.
         This still needs to happen because even if there's no buffer to read from, the threads that were awoken need to *consume the condition*, i.e. be able to check that it is verified before another awaker comes and resets it.
+        Just as in *tag_send*, call *schedule()* in the loop: the current CPU will be released by the task to execute other threads, e.g. the receivers we're waiting for.
     - Release instance awake_all mutex.
     - Release senders's rw_sem as reader.
 - If *command* is *REMOVE*:
