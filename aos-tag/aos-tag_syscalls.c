@@ -136,7 +136,8 @@ int aos_tag_get(int key, int cmd, int perm) {
         mutex_init(&(new_srv->awake_all_lock));
         TAG_COND_INIT(&(new_srv->globl_cond));
         // Add the new instance struct pointer to the static list.
-        if (down_write_killable(&(tags_list[tag].rcv_rwsem)) == -EINTR) {
+        if (unlikely(down_write_killable(&(tags_list[tag].rcv_rwsem))
+            == -EINTR)) {
             if (key != __TAG_IPC_PRIVATE) up_write(&shared_bst_lock);
             kfree(new_srv);
             printk(KERN_CRIT "%s: tag_get: Killed during list access.\n",
@@ -145,7 +146,8 @@ int aos_tag_get(int key, int cmd, int perm) {
                    MODNAME);
             return -EINTR;
         }
-        if (down_write_killable(&(tags_list[tag].snd_rwsem)) == -EINTR) {
+        if (unlikely(down_write_killable(&(tags_list[tag].snd_rwsem))
+            == -EINTR)) {
             up_write(&(tags_list[tag].rcv_rwsem));
             if (key != __TAG_IPC_PRIVATE) up_write(&shared_bst_lock);
             kfree(new_srv);
