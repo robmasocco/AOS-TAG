@@ -102,6 +102,7 @@ void scth_cleanup(void) {
         if (avail_sysnis[i].hacked) {
             __x86_wp_disable(flags);
             table_addr[avail_sysnis[i].tab_index] = (void *)sys_ni_syscall_addr;
+            asm volatile ("sfence" ::: "memory");
             __x86_wp_enable(flags);
             printk(KERN_INFO "%s: Restored entry %d.\n",
                    MODNAME, avail_sysnis[i].tab_index);
@@ -135,6 +136,7 @@ int scth_hack(void *new_call_addr) {
             new_call_index = avail_sysnis[i].tab_index;
             __x86_wp_disable(flags);
             table_addr[new_call_index] = new_call_addr;
+            asm volatile ("sfence" ::: "memory");
             __x86_wp_enable(flags);
             avail_sysnis[i].hacked = 1;
             printk(KERN_INFO "%s: Hacked entry %d.\n", MODNAME, new_call_index);
@@ -167,6 +169,7 @@ void scth_unhack(int to_restore) {
             avail_sysnis[i].hacked = 0;
             __x86_wp_disable(flags);
             table_addr[to_restore] = (void *)sys_ni_syscall_addr;
+            asm volatile ("sfence" ::: "memory");
             __x86_wp_enable(flags);
             mutex_unlock(&scth_lock);
             printk(KERN_INFO "%s: Restored entry %d.\n", MODNAME, to_restore);
