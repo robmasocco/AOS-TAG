@@ -95,6 +95,7 @@ Ensure proper locks are released in each *if-else* to avoid deadlocks.
 ## *int tag_receive(int tag, int level, char \*buffer, size_t size)*
 
 This configures the running thread as a *reader thread*.
+In this implementation I/O is *packetized*, meaning that only full messages are delivered, so this call will fail if the provided buffer isn't large enough.
 
 Returns 0 if the message was read, or -1 and *errno* is set to indicate the cause of the error.
 
