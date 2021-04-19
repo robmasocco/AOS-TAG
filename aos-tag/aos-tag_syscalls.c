@@ -61,7 +61,7 @@ extern tag_bitmask *tags_mask;
  * @param key Key to assign to the new instance, or to look for in the BST.
  * @param cmd Open a new instance, or look for an existing one.
  * @param perm Enables EUID checks for following operations.
- * @return Static list index as tag descriptor.
+ * @return Static list index as tag descriptor, or an error code for errno.
  */
 int aos_tag_get(int key, int cmd, int perm) {
     int sem_ret, tag, full = 0;
@@ -200,8 +200,72 @@ int aos_tag_snd(int tag, int lvl, char *buf, size_t size) {
     return 0;
 }
 
+/**
+ * Once the tag descriptor has been retrieved via tag_get, allows to control 
+ * an instance.
+ * Supported commands are: 
+ * - TAG_REMOVE: Deletes the instance, freeing the related tag descriptor. 
+ * - TAG_AWAKE_ALL: Awakes all threads waiting on all levels. 
+ * Returns 0 if the operation was successfully completed, or an error code 
+ * used to set errno.
+ *
+ * @param tag Tag descriptor of the instance to operate on.
+ * @param cmd Operation to perform on the instance.
+ * @return 0 if operation completed successfully, or an error code for errno.
+ */
 int aos_tag_ctl(int tag, int cmd) {
+    int sem_ret;
+    tag_t *tag_inst;
     // TODO Debug.
     printk(KERN_INFO "%s: tag_ctl: Called with (%d, %d).\n", MODNAME, tag, cmd);
+    // Consistency check on input arguments.
+    if ((tag < 0) || ((cmd != __TAG_REMOVE) && (cmd != __TAG_AWAKE_ALL)))
+        return -EINVAL;
+    // Execution will follow one of the next paths.
+    if (cmd == __TAG_AWAKE_ALL) {
+        unsigned char last_epoch;
+        unsigned int i;
+        // We have been asked to awake all threads waiting on all levels.
+        sem_ret = down_read_killable(&(tags_list[tag].snd_rwsem));
+        if (sem_ret == -EINTR) return -EINTR;
+        tag_inst = tags_list[tag].ptr;
+        if (tag_inst == NULL) {
+            // Instance is not there anymore, or yet.
+            up_read(&(tags_list[tag].snd_rwsem));
+            return -EIDRM;
+        }
+        if ((tag_inst->perm_check) &&
+            (tag_inst->creator_euid != current_euid())) {
+            // We're not allowed to operate on this instance.
+            up_read(&(tags_list[tag].snd_rwsem));
+            return -EPERM;
+        }
+        // Grab the AWAKE_ALL lock to exclude others.
+        sem_ret = mutex_lock_interruptible(&(tag_inst->awake_all_lock));
+        if (sem_ret == -EINTR) {
+            up_read(&(tags_list[tag].snd_rwsem));
+            return -EINTR;
+        }
+        // Change the current global epoch for this instance.
+        // This is a linearization point: all receivers that come after this
+        // won't get the call: they were too late.
+        last_epoch = TAG_COND_FLIP(&(tag_inst->globl_cond));
+        TAG_COND_VAL(&(tag_inst->globl_cond), last_epoch) = 0x1;
+        asm volatile ("sfence" ::: "memory");
+        // Wake up all levels, both queues since we don't know which reader
+        // got in which local epoch and we don't want to care.
+        for (i = 0; i < __NR_LEVELS; i++) {
+            wake_up_all(&((tag_inst->lvl_queues)[i][0]));
+            wake_up_all(&((tag_inst->lvl_queues)[i][1]));
+        }
+        // Busy-wait for readers to consume the condition.
+        while (TAG_COND_COUNT(&(tag_inst->globl_cond), last_epoch) > 0);
+        // All done!
+        mutex_unlock(&(tag_inst->awake_all_lock));
+        up_read(&(tags_list[tag].snd_rwsem));
+    }
+    if (cmd == __TAG_REMOVE) {
+        // We have been asked to remove an instance.
+    }
     return 0;
 } 

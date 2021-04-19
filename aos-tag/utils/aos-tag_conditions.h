@@ -113,6 +113,17 @@ typedef struct _tag_cond_t {
  * @param epoch Epoch selector of the condition to get.
  * @return Value of the specified condition, by direct evaluation.
  */
-#define TAG_COND_VAL(cond_addr, epoch) (cond_addr)->_conditions[epoch]
+#define TAG_COND_VAL(cond_addr, epoch) ((cond_addr)->_conditions)[epoch]
+
+/**
+ * Evaluates to the presence counter of the specified epoch.
+ * Made to be typically used as an lvalue.
+ * This time it was for neatness and not laziness.
+ *
+ * @param cond_addr Address of the given tag_cond.
+ * @param epoch Epoch selector of the condition to get.
+ * @return Presence counter of the specified epoch, by direct evaluation.
+ */
+#define TAG_COND_COUNT(cond_addr, epoch) ((cond_addr)->_pres_count)[epoch]
 
 #endif
