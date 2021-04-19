@@ -131,7 +131,7 @@ int aos_tag_get(int key, int cmd, int perm) {
         }
         if (perm == __TAG_USR) {
             new_srv->perm_check = 0x1;
-            new_srv->creator_euid = current_euid();
+            new_srv->creator_euid.val = current_euid().val;
         }
         mutex_init(&(new_srv->awake_all_lock));
         TAG_COND_INIT(&(new_srv->globl_cond));
@@ -249,7 +249,7 @@ int aos_tag_ctl(int tag, int cmd) {
             return -EIDRM;
         }
         if ((tag_inst->perm_check) &&
-            (tag_inst->creator_euid != current_euid())) {
+            (tag_inst->creator_euid.val != current_euid().val)) {
             // We're not allowed to operate on this instance.
             up_read(&(tags_list[tag].snd_rwsem));
             return -EPERM;
@@ -294,7 +294,7 @@ int aos_tag_ctl(int tag, int cmd) {
             return -EIDRM;
         }
         if ((tag_inst->perm_check) &&
-            (tag_inst->creator_euid != current_euid())) {
+            (tag_inst->creator_euid.val != current_euid().val)) {
             up_write(&(tags_list[tag].snd_rwsem));
             up_write(&(tags_list[tag].rcv_rwsem));
             return -EPERM;
@@ -324,7 +324,7 @@ int aos_tag_ctl(int tag, int cmd) {
             up_write(&shared_bst_lock);
         }
         TAG_CLR(tags_mask, tag);
-        tag_inst->creator_euid = 0;  // For security.
+        tag_inst->creator_euid.val = 0;  // For security.
         kfree(tag_inst);  // Done!
     }
     return 0;
