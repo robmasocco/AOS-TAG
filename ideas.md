@@ -82,7 +82,7 @@ Returns the tag descriptor (array index) of the new instance, or -1 and *errno* 
     - Linearly scan the bitmask to find a free entry in the array, then add it to the set and save the index.
     - Release bitmask spinlock.
     - Allocate and accordingly initialize a new instance struct.
-    - Acquire both instance rw_sems as writer (interruptible).
+    - Acquire both instance rw_sems as writer.
     - Set the instance struct pointer to the new struct's address.
     - Release both instance rw_sems as writer.
     - If key is not *IPC_PRIVATE*:
@@ -200,7 +200,7 @@ Returns 0 if the requested operation was completed successfully, or -1 and *errn
     - Release senders's rw_sem as reader.
 - If *command* is *REMOVE*:
     - Trylock receivers rw_sem as writer, exit if this fails since at least a reader is there.
-    - Lock senders rw_sem as writer (interruptible).
+    - Lock senders rw_sem as writer.
     - Check instance pointer, eventually exit.
     - Check permissions if required (flag), eventually exit.
     - Save instance struct pointer and set it to *NULL*.
@@ -362,6 +362,8 @@ Each synchronization scheme implemented, that makes the basic aforementioned ope
 Some sections rely on a light use of:
 
 - Sleeping locks, in the form of mutexes and rw_semaphores. The last ones are used primarily as presence counters, with the ability to exclude threads when needed without holding CPUs.
+    You may have noticed from the pseudocode above that when each of these locks is requested, the *interruptible/killable* variants of the APIs are used. This is intended because since any thread can request access to any tag entry in the instance array, independently of the instance effectively being active or not and of permissions allowing the following operations on it, there could be some activity on an instance. In the unfortunate (and unlikely, under normal usage) case that such activity is extensive and the call that tries to lock the rw_sems/mutexes blocks for too much time, it can be aborted with a signal. Since these locks are there to manage access to the internal state of the service and not really to wait indefinitely for events (like e.g. messages), and the *interruptible* variant for rw_semaphores is still quite [recent](https://www.spinics.net/lists/kernel/msg3759815.html), the *killable* variant is used almost everywhere, so in case of emergency *SIGKILL* should be used.
+    Now, when these interruptions occur, the calls try to return to user mode as soon as possible, releasing all the resources they can in the process. There are however some cases in which it is not possible to gracefully restore the internal state of the module. In such cases, a **critical error** message is printed in the kernel log buffer.
 - Spinning locks, in the form of spinlocks, to guard status-critical data structures. Critical sections involving these have been kept as small and quick as possible, and are meant to be executed ASAP, so we'd like some speed also while locking. But we're not coding interrupt handlers, so we don't need the additional overhead that comes when blocking IRQs, which is why we use only the basic APIs.
     One last word about the ***condition structure* lock**: could we have used an *rwlock* there, instead of a spinlock? Sure, most of the time this is accessed by readers and a lock is really needed only to prevent a particularly bad race condition, so why the full exclusion? Because compared to spinlocks, especially when the critical section is short, rwlocks are [slow](https://www.kernel.org/doc/html/latest/locking/spinlocks.html#lesson-2-reader-writer-spinlocks), effectively slower than using a fully exclusive spinning lock. Considering that the critical sections that involve such structure are only made of one or two simple atomic operations, the choice has favored spinlocks instead of rwlocks.
 
@@ -384,8 +386,6 @@ These are both real locks since potential writers are *removers* and *adders*, b
 Things are a little bit different when *adding* an instance: at first, the bitmask is atomically checked for a free spot, then the *adder* thread locks both rw_sems as a writer since being the pointer *NULL*, eventual readers/writers would almost immediately get out, then sets the pointer to that of a new instance struct. The BST is kept locked during this in order to avoid adding a same key possibly multiple times.
 
 Also, threads that come from the VFS while doing an *open* must synchronize with *adders* and *removers* to take a snapshot of each instance before it fades away. This can be accomplished by locking the senders rw_sem and checking the instance pointer. Using the receivers one causes a false positive for removers that want to check if no reader is there, this way they'd only have to wait for the snapshot to be taken since these threads deterministically release this rw_sem shortly after.
-
-You may have noticed from the pseudocode above that when each of these two rw_sems gets locked, the interruptible/killable variant of the API is used. This is intended because since any thread can request access to any tag entry in the instance array, independently of the instance effectively being active or not and of permissions allowing the following operations on it, there could be some activity on an instance. In the unfortunate (and unlikely, under normal usage) case that such activity is extensive and the call that locks the rw_sems as writer blocks for too much time, it can be aborted with a signal. The only case in which this doesn't happen is during critical error-recovery steps, where it's considered more valuable to try to restore the state of the structures before leaving gracefully.
 
 ## POSTING A MESSAGE ON A LEVEL
 
