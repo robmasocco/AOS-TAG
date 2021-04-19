@@ -307,7 +307,7 @@ Keep in mind that all data that forms the status of the system is at most 32 bit
         - Release senders rw_sem as reader.
         - For each of the 32 levels:
             - *memset* the line buffer to 0.
-            - *snprintf* status information in the line buffer: "TAG-key TAG-creator TAG-level Waiting-threads", writing at most 80 chars. Get the number of bytes written, it'll be useful in a moment.
+            - *scnprintf* status information in the line buffer: "TAG-key TAG-creator TAG-level Waiting-threads", writing at most 80 chars. Get the number of bytes written, it'll be useful in a moment.
             - *memcpy* the contents of the line buffer in the file buffer. Add a newline character at the end.
             - Advance the pointer accordingly.
     - Else: release senders's rw_sem as reader.
