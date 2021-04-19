@@ -237,7 +237,7 @@ int aos_tag_rcv(int tag, int lvl, char *buf, size_t size) {
         (tag_inst->creator_euid.val != current_euid().val)) {
         // We're not allowed to receive messages from this instance.
         up_read(&(tags_list[tag].rcv_rwsem));
-        return -EPERM;
+        return -EACCES;
     }
     // We're in.
     // Now let's register for the current local and global wait conditions.
@@ -280,7 +280,7 @@ int aos_tag_rcv(int tag, int lvl, char *buf, size_t size) {
             // Not enough.
             TAG_COND_UNREG(&((tag_inst->lvl_conds)[lvl]), lvl_epoch);
             up_read(&(tags_list[tag].rcv_rwsem));
-            return -ENOMEM;
+            return -ENOBUFS;
         }
         not_copied = copy_to_user(buf, tag_inst->msg_bufs[lvl],
                                   tag_inst->mgs_sizes[lvl]);
@@ -289,7 +289,7 @@ int aos_tag_rcv(int tag, int lvl, char *buf, size_t size) {
             // retry, so the operation is aborted.
             TAG_COND_UNREG(&((tag_inst->lvl_conds)[lvl]), lvl_epoch);
             up_read(&(tags_list[tag].rcv_rwsem));
-            return -ENOBUFS;
+            return -ECANCELED;
         }
     }
     TAG_COND_UNREG(&((tag_inst->lvl_conds)[lvl]), lvl_epoch);
@@ -346,7 +346,7 @@ int aos_tag_ctl(int tag, int cmd) {
            (tag_inst->creator_euid.val != current_euid().val)) {
             // We're not allowed to operate on this instance.
             up_read(&(tags_list[tag].snd_rwsem));
-            return -EPERM;
+            return -EACCES;
         }
         // Grab the AWAKE_ALL lock to exclude others.
         if (mutex_lock_interruptible(&(tag_inst->awake_all_lock)) == -EINTR) {
@@ -383,7 +383,7 @@ int aos_tag_ctl(int tag, int cmd) {
             return -EINTR;
         }
         // We're in. Check if the instance is there and whether we can
-        // access it or not.
+        // access it or not, as above.
         tag_inst = tags_list[tag].ptr;
         if (tag_inst == NULL) {
             up_write(&(tags_list[tag].snd_rwsem));
@@ -394,7 +394,7 @@ int aos_tag_ctl(int tag, int cmd) {
             (tag_inst->creator_euid.val != current_euid().val)) {
             up_write(&(tags_list[tag].snd_rwsem));
             up_write(&(tags_list[tag].rcv_rwsem));
-            return -EPERM;
+            return -EACCES;
         }
         // We got this. Just disconnect the instance ASAP.
         tags_list[tag].ptr = NULL;
