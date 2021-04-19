@@ -67,13 +67,13 @@ extern unsigned int max_msg_sz;
  * @return Static list index as tag descriptor, or an error code for errno.
  */
 int aos_tag_get(int key, int cmd, int perm) {
-    int sem_ret, tag, full = 0;
+    int tag, full = 0;
     SplayIntNode *search_res;
     tag_t *new_srv;
     unsigned int i;
     unsigned long ins_res;
     // TODO Debug.
-    printk(KERN_INFO "%s: tag_get: Called with (%d, %d, %d).\n",
+    printk(KERN_DEBUG "%s: tag_get: Called with (%d, %d, %d).\n",
         MODNAME, key, cmd, perm);
     // Consistency check on input arguments.
     if ((cmd != __TAG_OPEN) && (cmd != __TAG_CREATE)) return -EINVAL;
@@ -81,8 +81,7 @@ int aos_tag_get(int key, int cmd, int perm) {
     // Normal operation basically follows one of two paths.
     if ((cmd == __TAG_OPEN) && (key != __TAG_IPC_PRIVATE)) {
         // We have been asked to reopen an instance, if it exists.
-        sem_ret = down_read_killable(&shared_bst_lock);
-        if (sem_ret == -EINTR) return -EINTR;
+        if (down_read_killable(&shared_bst_lock) == -EINTR) return -EINTR;
         search_res =
             (SplayIntNode *)splay_int_search(shared_bst, key);
         if (search_res == NULL) {
@@ -101,8 +100,7 @@ int aos_tag_get(int key, int cmd, int perm) {
         if (key != __TAG_IPC_PRIVATE) {
             // We have been asked to create a new shared instance.
             // We gotta lock the BST and look for the key first.
-            sem_ret = down_write_killable(&shared_bst_lock);
-            if (sem_ret == -EINTR) return -EINTR;
+            if (down_write_killable(&shared_bst_lock) == -EINTR) return -EINTR;
             search_res =
                 (SplayIntNode *)splay_int_search(shared_bst, key);
             if (search_res != NULL) {
@@ -138,19 +136,23 @@ int aos_tag_get(int key, int cmd, int perm) {
         mutex_init(&(new_srv->awake_all_lock));
         TAG_COND_INIT(&(new_srv->globl_cond));
         // Add the new instance struct pointer to the static list.
-        sem_ret = down_write_killable(&(tags_list[tag].rcv_rwsem));
-        if (sem_ret == -EINTR) {
+        if (down_write_killable(&(tags_list[tag].rcv_rwsem)) == -EINTR) {
             if (key != __TAG_IPC_PRIVATE) up_write(&shared_bst_lock);
             kfree(new_srv);
-            TAG_CLR(tags_mask, tag);
+            printk(KERN_CRIT "%s: tag_get: Killed during list access.\n",
+                   MODNAME);
+            printk(KERN_CRIT "%s: Module state corrupted, please remove.\n",
+                   MODNAME);
             return -EINTR;
         }
-        sem_ret = down_write_killable(&(tags_list[tag].snd_rwsem));
-        if (sem_ret == -EINTR) {
+        if (down_write_killable(&(tags_list[tag].snd_rwsem)) == -EINTR) {
             up_write(&(tags_list[tag].rcv_rwsem));
             if (key != __TAG_IPC_PRIVATE) up_write(&shared_bst_lock);
             kfree(new_srv);
-            TAG_CLR(tags_mask, tag);
+            printk(KERN_CRIT "%s: tag_get: Killed during list access.\n",
+                   MODNAME);
+            printk(KERN_CRIT "%s: Module state corrupted, please remove.\n",
+                   MODNAME);
             return -EINTR;
         }
         tags_list[tag].ptr = new_srv;
@@ -161,25 +163,29 @@ int aos_tag_get(int key, int cmd, int perm) {
             // Now we make the modification visible by adding the new entry to
             // the BST.
             ins_res = splay_int_insert(shared_bst, key, tag);
+            up_write(&shared_bst_lock);
             if (unlikely(ins_res == 0)) {
                 // Insertion in the BST failed.
                 // Now this is bad: we have to undo all that we just did,
                 // but we released locks.
-                // We admit interruptions only as failsafes.
-                sem_ret = 0;
-                sem_ret = down_write_killable(&(tags_list[tag].rcv_rwsem));
-                sem_ret = down_write_killable(&(tags_list[tag].snd_rwsem));
+                int sem_ret1 = 0, sem_ret2 = 0;
+                sem_ret1 = down_write_killable(&(tags_list[tag].rcv_rwsem));
+                sem_ret2 = down_write_killable(&(tags_list[tag].snd_rwsem));
                 tags_list[tag].ptr = NULL;
                 asm volatile ("sfence" ::: "memory");
-                up_write(&(tags_list[tag].snd_rwsem));
-                up_write(&(tags_list[tag].rcv_rwsem));
+                if (sem_ret1 != -EINTR) up_write(&(tags_list[tag].snd_rwsem));
+                if (sem_ret2 != -EINTR) up_write(&(tags_list[tag].rcv_rwsem));
                 kfree(new_srv);
+                if ((sem_ret1 == -EINTR) || (sem_ret2 == -EINTR)) {
+                    printk(KERN_CRIT "%s: tag_get: Killed while recovering "
+                           "failed BST insert.\n", MODNAME);
+                    printk(KERN_CRIT "%s: Module state corrupted, please "
+                           "remove.\n", MODNAME);
+                    return -EINTR;
+                }
                 TAG_CLR(tags_mask, tag);
-                up_write(&shared_bst_lock);
-                if (sem_ret == -EINTR) return -EINTR;
                 return -ENOMEM;
             }
-            up_write(&shared_bst_lock);
             // TODO Debug.
             printk(KERN_DEBUG "%s: tag_get: Insert returned: %lu.\n",
                 MODNAME, ins_res);
@@ -219,7 +225,6 @@ int aos_tag_snd(int tag, int lvl, char *buf, size_t size) {
  * @return 0 if operation completed successfully, or an error code for errno.
  */
 int aos_tag_ctl(int tag, int cmd) {
-    int sem_ret;
     tag_t *tag_inst;
     // TODO Debug.
     printk(KERN_DEBUG "%s: tag_ctl: Called with (%d, %d).\n",
@@ -304,11 +309,11 @@ int aos_tag_ctl(int tag, int cmd) {
                 // This path exists only as a failsafe.
                 // We try to at least free the memory, but module state will
                 // be left broken.
+                kfree(tag_inst);
                 printk(KERN_CRIT "%s: tag_ctl: Killed during BST access.\n",
                        MODNAME);
                 printk(KERN_CRIT "%s: Module state corrupted, please remove.\n",
                        MODNAME);
-                kfree(tag_inst);
                 return -EINTR;
             }
             if (!splay_int_delete(shared_bst, tag_inst->key))
