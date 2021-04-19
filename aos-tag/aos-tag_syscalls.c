@@ -276,6 +276,9 @@ int aos_tag_ctl(int tag, int cmd) {
         // All done!
         mutex_unlock(&(tag_inst->awake_all_lock));
         up_read(&(tags_list[tag].snd_rwsem));
+        // TODO Debug.
+        printk(KERN_DEBUG "%s: tag_ctl: Awoken all receivers on tag: %d.\n",
+               MODNAME, tag);
     }
     if (cmd == __TAG_REMOVE) {
         // We have been asked to remove an instance.
@@ -322,10 +325,15 @@ int aos_tag_ctl(int tag, int cmd) {
                 printk(KERN_ERR "%s: tag_ctl: Couldn't remove key %d, with tag"
                        " %d.\n", MODNAME, tag_inst->key, tag);
             up_write(&shared_bst_lock);
+            // TODO Debug.
+            printk(KERN_DEBUG "%s: tag_ctl: Deleted key: %d from BST.\n",
+                   MODNAME, tag_inst->key);
         }
         TAG_CLR(tags_mask, tag);
         tag_inst->creator_euid.val = 0;  // For security.
         kfree(tag_inst);  // Done!
+        // TODO Debug.
+        printk(KERN_DEBUG "%s: tag_ctl: Removed tag: %d.\n", MODNAME, tag);
     }
     return 0;
 }
