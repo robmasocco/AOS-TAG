@@ -261,6 +261,8 @@ Each entry holds:
 - Array of two atomic long *presence counters*.
 - spinlock "condition lock".
 
+Numeric fields are accessed using atomic operations, with the *RELAXED* memory order since we have no specific ordering requirement.
+
 # MODULE PARAMETERS
 
 Consider adding anything you might need to debug this module.
@@ -401,7 +403,6 @@ Full instance wakeups work in a similar fashion, as is clear from the pseudocode
 
 # TODO LIST
 
-- When dealing with atomic counters, use the *relaxed* memory order since we don't care about particular ordering of those instructions, only that they get executed atomically.
 - Signals, interrupts, preemption and the like checks against deadlocks and similar problems. Remember that wait queues functions return *-ERESTARTSYS* when a signal was delivered. See our little golden screenshot from our course materials to know how signals work (and remember: they're usermode shit, you just return -EINTR).
 - Anything still marked as TODO here.
 - Load and unload scripts, that handle *insmod*, *rmmod* and possibly compilation accordingly.
