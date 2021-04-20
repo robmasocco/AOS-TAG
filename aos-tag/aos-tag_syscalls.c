@@ -285,6 +285,7 @@ int aos_tag_rcv(int tag, int lvl, char *buf, size_t size) {
         }
         not_copied = copy_to_user(buf, tag_inst->msg_bufs[lvl],
                                   tag_inst->mgs_sizes[lvl]);
+        asm volatile ("mfence" ::: "memory");
         if (not_copied != 0) {
             // copy_to_user failed. Since it shouldn't, this service doesn't
             // retry, so the operation is aborted.
