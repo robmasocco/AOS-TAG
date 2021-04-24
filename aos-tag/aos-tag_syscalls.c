@@ -403,24 +403,15 @@ int aos_tag_ctl(int tag, int cmd) {
         // Ok, now let's cut all references: BST and bitmask.
         if (tag_inst->key != __TAG_IPC_PRIVATE) {
             // Remove this key from the BST.
-            if (unlikely(down_write_killable(&shared_bst_lock) == -EINTR)) {
-                // This path exists only as a failsafe.
-                // We try to at least free the memory, but module state will
-                // be left broken.
-                kfree(tag_inst);
-                printk(KERN_CRIT "%s: tag_ctl: Killed during BST access.\n",
-                       MODNAME);
-                printk(KERN_CRIT "%s: Module state corrupted, please remove.\n",
-                       MODNAME);
-                return -ENOTRECOVERABLE;
-            }
+            down_write(&shared_bst_lock);
             if (!splay_int_delete(shared_bst, tag_inst->key))
                 printk(KERN_ERR "%s: tag_ctl: Couldn't remove key %d, with tag"
                        " %d.\n", MODNAME, tag_inst->key, tag);
-            up_write(&shared_bst_lock);
             // TODO Debug.
-            printk(KERN_DEBUG "%s: tag_ctl: Deleted key: %d from BST.\n",
+            else
+                printk(KERN_DEBUG "%s: tag_ctl: Deleted key: %d from BST.\n",
                    MODNAME, tag_inst->key);
+            up_write(&shared_bst_lock);
         }
         TAG_CLR(tags_mask, tag);
         tag_inst->creator_euid.val = 0;  // For security.
