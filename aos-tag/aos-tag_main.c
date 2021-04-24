@@ -93,22 +93,38 @@ MODULE_PARM_DESC(max_msg_sz, "Max message size for all instances.");
 /* SYSTEM CALLS STUBS */
 /* tag_get kernel level stub. */
 __SYSCALL_DEFINEx(3, _tag_get, int, key, int, cmd, int, perm) {
-    return aos_tag_get(key, cmd, perm);
+    int ret;
+    if (!try_module_get(THIS_MODULE)) return -ENOSYS;
+    ret = aos_tag_get(key, cmd, perm);
+    module_put(THIS_MODULE);
+    return ret;
 }
 
 /* tag_receive kernel level stub. */
 __SYSCALL_DEFINEx(4, _tag_rcv, int, tag, int, lvl, char*, buf, size_t, size) {
-    return aos_tag_rcv(tag, lvl, buf, size);
+    int ret;
+    if (!try_module_get(THIS_MODULE)) return -ENOSYS;
+    ret = aos_tag_rcv(tag, lvl, buf, size);
+    module_put(THIS_MODULE);
+    return ret;
 }
 
 /* tag_send kernel level stub. */
 __SYSCALL_DEFINEx(4, _tag_snd, int, tag, int, lvl, char*, buf, size_t, size) {
-    return aos_tag_snd(tag, lvl, buf, size);
+    int ret;
+    if (!try_module_get(THIS_MODULE)) return -ENOSYS;
+    ret = aos_tag_snd(tag, lvl, buf, size);
+    module_put(THIS_MODULE);
+    return ret;
 }
 
 /* tag_ctl kernel level stub. */
 __SYSCALL_DEFINEx(2, _tag_ctl, int, tag, int, cmd) {
-    return aos_tag_ctl(tag, cmd);
+    int ret;
+    if (!try_module_get(THIS_MODULE)) return -ENOSYS;
+    ret = aos_tag_ctl(tag, cmd);
+    module_put(THIS_MODULE);
+    return ret;
 }
 
 // TODO Device driver stuff.

@@ -10,7 +10,7 @@ Brainstorming table for whatever needs to be discussed before the coding starts.
 - The device file driver only has to scan the array.
 - Permissions are implemented as simple checks of the current EUID against the creator's EUID when a thread calls a *send* or a *receive* on an active instance. Such EUID is stored upon creation of the instance and checked each time it is acted upon.
 - When loaded, this does a *try_module_get* on the *scth* module in the *init_module*, which is a dependency, releasing it with a *module_put* in *cleanup_module*.
-- Routines should be embedded into functions, to simplify code-writing, system calls definitions and device drivers coding.
+- Routines are embedded into functions, to simplify code-writing, system calls definitions and device drivers coding.
 
 ## BINARY SEARCH TREE
 
@@ -56,6 +56,13 @@ If any of the aforementioned steps fails, the routine should terminate releasing
 - Remove the BST dictionary.
 
 Each of the aforementioned steps must at least be attempted, in order to remove as many resources as possible. If at the end some failed, we should only report it in the kernel log since no error code can be returned.
+
+### Module locking
+
+A very simple module locking scheme is implemented in this project to ensure that syscalls do not end up operating on stale, inconsistent, not-anymore-present data (especially blocking ones), possibly causing kernel oopses or worse.
+The *SCTH* module is a dependency, so it is locked as first thing and released upon module removal.
+Then, in its wrapper, each system call does a *try_module_get(THIS_MODULE)* before attempting to execute its real code.
+**Note that, due to how the module locking feature is implemented in the Linux kernel, this still leaves room for some really impossible race conditions that would consist in a system call executing code that lies in a released memory region (the part before the _try\_module\_get_). This is the best that we can do. Causing the aforementioned condition during normal execution would require surgical scheduler precision, excellent timing, and a strong will to wreak havoc. We assume that a user knows when to remove the module, and do all that is possible to prevent any damage anywhere we can.**
 
 # OPERATIONS DETAILS
 
@@ -411,6 +418,7 @@ Full instance wakeups work in a similar fashion, as is clear from the pseudocode
 - Load and unload scripts, that handle *insmod*, *rmmod* and possibly compilation accordingly.
 - Usermode header file and source file with stubs. Remember to set *errno* to zero before any call!
 - Hide debug audits with preprocessor directives.
+- Documentation. Also: words first and pseudocode last.
 - Remember that we removed the wake-up loop. Check if that is necessary if there's any trouble with wake-ups.
 
 # EXTRAS
