@@ -371,6 +371,10 @@ int aos_tag_ctl(int tag, int cmd) {
         // Since busy-wait loops are bad in the kernel let the scheduler run
         // some other task on this CPU in the meantime.
         while (TAG_COND_COUNT(&(tag_inst->globl_cond), last_epoch) > 0)
+            // Note that due to the tag_rcv behavior, the aforementioned
+            // counter will reach zero, independently of the readers terminating
+            // gracefully or not, so this thread will never become an
+            // unkillable idle process *knocks on wood*.
             schedule();
         // All done!
         mutex_unlock(&(tag_inst->awake_all_lock));
