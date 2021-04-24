@@ -234,7 +234,7 @@ int aos_tag_rcv(int tag, int lvl, char *buf, size_t size) {
         up_read(&(tags_list[tag].rcv_rwsem));
         return -EIDRM;
     }
-    if (tag_inst->perm_check &&
+    if ((tag_inst->perm_check) && (current_euid().val != 0) &&
         (tag_inst->creator_euid.val != current_euid().val)) {
         // We're not allowed to receive messages from this instance.
         up_read(&(tags_list[tag].rcv_rwsem));
@@ -344,8 +344,8 @@ int aos_tag_ctl(int tag, int cmd) {
             up_read(&(tags_list[tag].snd_rwsem));
             return -EIDRM;
         }
-        if (tag_inst->perm_check &&
-           (tag_inst->creator_euid.val != current_euid().val)) {
+        if ((tag_inst->perm_check) && (current_euid().val != 0) &&
+            (tag_inst->creator_euid.val != current_euid().val)) {
             // We're not allowed to operate on this instance.
             up_read(&(tags_list[tag].snd_rwsem));
             return -EACCES;
@@ -395,7 +395,7 @@ int aos_tag_ctl(int tag, int cmd) {
             up_write(&(tags_list[tag].rcv_rwsem));
             return -EIDRM;
         }
-        if ((tag_inst->perm_check) &&
+        if ((tag_inst->perm_check) && (current_euid().val != 0) &&
             (tag_inst->creator_euid.val != current_euid().val)) {
             up_write(&(tags_list[tag].snd_rwsem));
             up_write(&(tags_list[tag].rcv_rwsem));
