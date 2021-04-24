@@ -89,12 +89,12 @@ Returns the tag descriptor (array index) of the new instance, or -1 and *errno* 
     - Linearly scan the bitmask to find a free entry in the array, then add it to the set and save the index.
     - Release bitmask spinlock.
     - Allocate and accordingly initialize a new instance struct.
+    - If key is not *IPC_PRIVATE*: add a new entry to the tree.
+        We do this now because we must check the result of the insert operation. Doing it later would mean being open to the possibility of leaving the internal state of the module corrupted, because of additional interruptions and error handling related to semaphores. Since we must anyhow hold the BST lock until the end, let's do this now to simplify things a lot, and make the effect visible later on when we'll release the lock.
     - Acquire both instance rw_sems as writer.
     - Set the instance struct pointer to the new struct's address.
     - Release both instance rw_sems as writer.
-    - If key is not *IPC_PRIVATE*:
-        - Add a new entry to the tree.
-        - Release the tree rw_sem as a writer.
+    - If key is not *IPC_PRIVATE*: release the tree rw_sem as a writer.
 - Return.
 
 Ensure proper locks are released in each *if-else* to avoid deadlocks.
@@ -374,7 +374,8 @@ Each synchronization scheme implemented, that makes the basic aforementioned ope
 Some sections rely on a light use of:
 
 - Sleeping locks, in the form of mutexes and rw_semaphores. The last ones are used primarily as presence counters, with the ability to exclude threads when needed without holding CPUs.
-    You may have noticed from the pseudocode above that when each of these locks is requested, the *interruptible/killable* variants of the APIs are used. This is intended because since any thread can request access to any tag entry in the instance array, independently of the instance effectively being active or not and of permissions allowing the following operations on it, there could be some activity on an instance. In the unfortunate (and unlikely, under normal usage) case that such activity is extensive and the call that tries to lock the rw_sems/mutexes blocks for too much time, it can be aborted with a signal. Since these locks are there to manage access to the internal state of the service and not really to wait indefinitely for events (like e.g. messages), and the *interruptible* variant for rw_semaphores is still quite [recent](https://www.spinics.net/lists/kernel/msg3759815.html), the *killable* variant is used almost everywhere, so in case of emergency *SIGKILL* should be used.
+    You may have noticed from the pseudocode above that when each of these locks is requested, the *interruptible/killable* variants of the APIs are used. This is intended because since any thread can request access to any tag entry in the instance array, independently of the instance effectively being active or not and of permissions allowing the following operations on it, there could be some activity on an instance. In the unfortunate (and unlikely, under normal usage) case that such activity is extensive and the call that tries to lock the rw_sems/mutexes blocks for too much time, it can be aborted with a signal.
+    Since the semaphores are there to manage access to the internal state of the service and not really to wait indefinitely for events (like e.g. messages), and the *interruptible* variant for rw_semaphores is still quite [recent](https://www.spinics.net/lists/kernel/msg3759815.html), the *killable* variant is used almost everywhere, so in case of emergency *SIGKILL* should be used.
     Now, when these interruptions occur, the calls try to return to user mode as soon as possible, releasing all the resources and memory they can in the process without taking any other lock. There are however some cases in which it is not possible to gracefully restore the internal state of the module. In such cases, a **critical error** message is printed in the kernel log buffer.
 - Spinning locks, in the form of spinlocks, to guard status-critical data structures. Critical sections involving these have been kept as small and quick as possible, and are meant to be executed ASAP, so we'd like some speed also while locking. But we're not coding interrupt handlers, so we don't need the additional overhead that comes when blocking IRQs, which is why we use only the basic APIs.
     One last word about the ***condition structure* lock**: could we have used an *rwlock* there, instead of a spinlock? Sure, most of the time this is accessed by readers and a lock is really needed only to prevent a particularly bad race condition, so why the full exclusion? Because compared to spinlocks, especially when the critical section is short, rwlocks are [slow](https://www.kernel.org/doc/html/latest/locking/spinlocks.html#lesson-2-reader-writer-spinlocks), effectively slower than using a fully exclusive spinning lock. Considering that the critical sections that involve such structure are only made of one or two simple atomic operations, the choice has favored spinlocks instead of rwlocks.

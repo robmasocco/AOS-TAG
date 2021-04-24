@@ -124,6 +124,24 @@ int aos_tag_get(int key, int cmd, int perm) {
             if (key != __TAG_IPC_PRIVATE) up_write(&shared_bst_lock);
             return -ENOMEM;
         }
+        // Add the new entry to the BST.
+        // We do this now to simplify handling of error conditions (see notes),
+        // but make the effect visible later by releasing the BST lock later on.
+        if (key != __TAG_IPC_PRIVATE) {
+            ins_res = splay_int_insert(shared_bst, key, tag);
+            if (unlikely(ins_res == 0)) {
+                // Insertion failed, probably 'cause we're out of memory.
+                up_write(&shared_bst_lock);
+                kfree(new_srv);
+                TAG_CLR(tags_mask, tag);
+                printk(KERN_ERR "%s: tag_get: Failed to insert new pair "
+                                "(%d, %d).\n", MODNAME, key, tag);
+                return -ENOMEM;
+            }
+            // TODO Debug.
+            printk(KERN_DEBUG "%s: tag_get: Insert returned: %lu.\n",
+                MODNAME, ins_res);
+        }
         new_srv->key = key;
         for (i = 0; i < __NR_LEVELS; i++) {
             mutex_init(&((new_srv->snd_locks)[i]));
@@ -138,64 +156,36 @@ int aos_tag_get(int key, int cmd, int perm) {
         mutex_init(&(new_srv->awake_all_lock));
         TAG_COND_INIT(&(new_srv->globl_cond));
         // Add the new instance struct pointer to the static list.
+        // Failsafe paths will quickly get us out of here, preserving module's
+        // internal state.
         if (unlikely(down_write_killable(&(tags_list[tag].rcv_rwsem))
             == -EINTR)) {
-            if (key != __TAG_IPC_PRIVATE) up_write(&shared_bst_lock);
+            if (key != __TAG_IPC_PRIVATE) {
+                splay_int_delete(shared_bst, key);
+                up_write(&shared_bst_lock);
+            }
             kfree(new_srv);
-            printk(KERN_CRIT "%s: tag_get: Killed during list access.\n",
-                   MODNAME);
-            printk(KERN_CRIT "%s: Module state corrupted, please remove.\n",
-                   MODNAME);
-            return -ENOTRECOVERABLE;
+            TAG_CLR(tags_mask, tag);
+            return -EINTR;
         }
         if (unlikely(down_write_killable(&(tags_list[tag].snd_rwsem))
             == -EINTR)) {
             up_write(&(tags_list[tag].rcv_rwsem));
-            if (key != __TAG_IPC_PRIVATE) up_write(&shared_bst_lock);
+            if (key != __TAG_IPC_PRIVATE) {
+                splay_int_delete(shared_bst, key);
+                up_write(&shared_bst_lock);
+            }
             kfree(new_srv);
-            printk(KERN_CRIT "%s: tag_get: Killed during list access.\n",
-                   MODNAME);
-            printk(KERN_CRIT "%s: Module state corrupted, please remove.\n",
-                   MODNAME);
-            return -ENOTRECOVERABLE;
+            TAG_CLR(tags_mask, tag);
+            return -EINTR;
         }
         tags_list[tag].ptr = new_srv;
         asm volatile ("sfence" ::: "memory");
         up_write(&(tags_list[tag].snd_rwsem));
         up_write(&(tags_list[tag].rcv_rwsem));
-        if (key != __TAG_IPC_PRIVATE) {
-            // Now we make the modification visible by adding the new entry to
-            // the BST.
-            ins_res = splay_int_insert(shared_bst, key, tag);
+        if (key != __TAG_IPC_PRIVATE)
+            // Now that all is in place we make the addition visible to all.
             up_write(&shared_bst_lock);
-            if (unlikely(ins_res == 0)) {
-                // Insertion in the BST failed.
-                // Now this is bad: we have to undo all that we just did,
-                // but we released locks.
-                // We try to reacquire them and do this gracefully.
-                int sem_ret1 = 0, sem_ret2 = 0;
-                sem_ret1 = down_write_killable(&(tags_list[tag].rcv_rwsem));
-                if (sem_ret1 != -EINTR)
-                    sem_ret2 = down_write_killable(&(tags_list[tag].snd_rwsem));
-                tags_list[tag].ptr = NULL;
-                asm volatile ("sfence" ::: "memory");
-                if (sem_ret1 != -EINTR) up_write(&(tags_list[tag].snd_rwsem));
-                if (sem_ret2 != -EINTR) up_write(&(tags_list[tag].rcv_rwsem));
-                kfree(new_srv);
-                if ((sem_ret1 == -EINTR) || (sem_ret2 == -EINTR)) {
-                    printk(KERN_CRIT "%s: tag_get: Killed while recovering "
-                           "failed BST insert.\n", MODNAME);
-                    printk(KERN_CRIT "%s: Module state corrupted, please "
-                           "remove.\n", MODNAME);
-                    return -ENOTRECOVERABLE;
-                }
-                TAG_CLR(tags_mask, tag);
-                return -ENOMEM;
-            }
-            // TODO Debug.
-            printk(KERN_DEBUG "%s: tag_get: Insert returned: %lu.\n",
-                MODNAME, ins_res);
-        }
         // TODO Debug.
         printk(KERN_DEBUG "%s: tag_get: New tag: %d.\n", MODNAME, tag);
         return tag;
