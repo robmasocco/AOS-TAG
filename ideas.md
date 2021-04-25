@@ -426,4 +426,5 @@ Full instance wakeups work in a similar fashion, as is clear from the pseudocode
 - Docs in here:
     - A README for SCTH.
         Mention that we left it as a secondary module to experiment with exported symbols, module dependencies, and module locking, but that for simplicity we just modified it a tad bit, i.e. we added a mutex to make operations atomic.
+    - Usage manual, in the main page.
 
