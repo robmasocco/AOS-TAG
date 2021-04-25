@@ -415,17 +415,13 @@ Full instance wakeups work in a similar fashion, as is clear from the pseudocode
 
 # TODO LIST
 
-- Signals, interrupts, preemption and the like checks against deadlocks and similar problems. Remember that wait queues functions return *-ERESTARTSYS* when a signal was delivered. See our little golden screenshot from our course materials to know how signals work (and remember: they're usermode shit, you just return -EINTR).
-- Anything still marked as TODO here.
 - Load and unload scripts, that handle *insmod*, *rmmod* and possibly compilation accordingly.
 - Usermode header file and source file with stubs. Remember to set *errno* to zero before any call!
 - Hide debug audits with preprocessor directives.
 - Documentation. Also: words first and pseudocode last.
-- Remember that we removed the wake-up loop. Check if that is necessary if there's any trouble with wake-ups.
 
 # EXTRAS
 
-- Error checks and errno settings everywhere.
 - Definitions of system call numbers for the user code given by *make* after module insertion using *awk* to read numbers from pseudofiles.
 - *__randomize_layout* of some structs?
 - Docs in here:
