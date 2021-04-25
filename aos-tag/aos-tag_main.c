@@ -142,7 +142,7 @@ tag_ptr_t *tags_list = NULL;
 tag_bitmask *tags_mask = NULL;
 
 /**
- * Module initialization routine. 
+ * @brief Module initialization routine. 
  * Initializes the module's data and internal structures, and 
  * requests system calls installation. 
  * See notes for a detailed description of the operations performed.
@@ -221,7 +221,7 @@ int init_module(void) {
 }
 
 /**
- * Module cleanup routine. 
+ * @brief Module cleanup routine. 
  * Undoes all that init_module did, in reverse.
  */
 void cleanup_module(void) {

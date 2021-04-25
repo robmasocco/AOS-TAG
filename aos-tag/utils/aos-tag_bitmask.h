@@ -46,7 +46,8 @@ typedef struct _tag_bitmask {
 } tag_bitmask;
 
 /**
- * Creates a tag bitmask capable of holding the specified number of elements.
+ * @brief Creates a tag bitmask capable of holding the specified number of 
+ * elements.
  *
  * @param tags Number of valid bits to hold.
  * @return Address of the new bitmask.
@@ -92,7 +93,7 @@ typedef struct _tag_bitmask {
 #endif
 
 /**
- * Removes a given tag bitmask, freeing memory.
+ * @brief Removes a given tag bitmask, freeing memory.
  *
  * @param mask Tag mask to free.
  */
@@ -111,7 +112,7 @@ typedef struct _tag_bitmask {
 #endif
 
 /**
- * Sets a specific bit in the bitmask. 
+ * @brief Sets a specific bit in the bitmask. 
  * NOTE: No validity check on the index is performed! 
  * WARNING: This routine does not acquire the mask lock, you'll have to do it 
  *          manually prior to the call.
@@ -133,7 +134,7 @@ typedef struct _tag_bitmask {
     } while (0)
 
 /**
- * Clears a specific bit in the bitmask. 
+ * @brief Clears a specific bit in the bitmask. 
  * NOTE: No validity check on the index is performed! 
  * WARNING: This routine acquires the mask lock. 
  *
@@ -170,8 +171,8 @@ typedef struct _tag_bitmask {
 #endif
 
 /**
- * Returns the index of the first zero bit in the bitmask and sets full_flag to 
- * zero, or sets full_flag to 1 if the mask is full.
+ * @brief Returns the index of the first zero bit in the bitmask and sets 
+ * full_flag to zero, or sets full_flag to 1 if the mask is full.
  * For the sake of speed, the bit is also set to 1. 
  * NOTE: Validity check is performed here, since the mask length could 
  *       exceed the number of valid positions in the array. 

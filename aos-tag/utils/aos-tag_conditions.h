@@ -41,7 +41,7 @@ typedef struct _tag_cond_t {
 } tag_cond_t;
 
 /**
- * Initializes a given condition struct.
+ * @brief Initializes a given condition struct.
  *
  * @param cond_addr Address of the tag_cond to initialize.
  */
@@ -56,7 +56,7 @@ typedef struct _tag_cond_t {
     } while (0)
 
 /**
- * Registers the calling thread on the current epoch. 
+ * @brief Registers the calling thread on the current epoch. 
  * Returns the epoch on which the thread got registered. 
  * NOTE: Increments need to be atomic even if we hold the lock since the next 
  *       macro, which decrements, does so without holding any lock. 
@@ -76,7 +76,7 @@ typedef struct _tag_cond_t {
     __epoch_sel; })
 
 /**
- * Unregisters the calling thread from the specified epoch of the given 
+ * @brief Unregisters the calling thread from the specified epoch of the given 
  * condition struct.
  *
  * @param cond_addr Address of the tag_cond to operate on.
@@ -87,8 +87,8 @@ typedef struct _tag_cond_t {
         1, __ATOMIC_RELAXED);
 
 /**
- * Flips the given tag_cond's epoch, and returns the selector of the old epoch. 
- * Also resets the new epoch's condition.
+ * @brief Flips the given tag_cond's epoch, and returns the selector of the old 
+ * epoch. Also resets the new epoch's condition.
  *
  * @param cond_addr Address of the tag_cond to operate on.
  * @return Epoch selector of the now "old" epoch.
@@ -105,7 +105,7 @@ typedef struct _tag_cond_t {
     __last_epoch; })
 
 /**
- * Evaluates to the condition value of the specified epoch. 
+ * @brief Evaluates to the condition value of the specified epoch. 
  * Can be used both as an rvalue and an lvalue. 
  * Yes, I'm that lazy.
  *
@@ -116,7 +116,7 @@ typedef struct _tag_cond_t {
 #define TAG_COND_VAL(cond_addr, epoch) ((cond_addr)->_conditions)[epoch]
 
 /**
- * Evaluates to the presence counter of the specified epoch.
+ * @brief Evaluates to the presence counter of the specified epoch. 
  * Made to be typically used as an lvalue.
  * This time it was for neatness and not laziness.
  *

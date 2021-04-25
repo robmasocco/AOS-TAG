@@ -34,8 +34,8 @@
 #define __X86_CR0_WP 0x10000
 
 /**
- * Returns the content of the CR3 register: physical address of the current
- * page table in main memory.
+ * @brief Returns the content of the CR3 register: physical address of the 
+ * current page table in main memory.
  * 
  * @return Physical address of top level page table (PML4 on x86-64).
  */
@@ -53,7 +53,7 @@ static inline unsigned long __x86_read_cr3(void) {
 }
 
 /**
- * Disables Write Protection on x86 CPUs, clearing the WP bit in CR0. 
+ * @brief Disables Write Protection on x86 CPUs, clearing the WP bit in CR0. 
  * WARNING: To keep machine state consistent, this disables IRQs too, saving 
  * their disabled state in the provided variable. Is meant to be used to circle 
  * some really critical, deterministic, nonblocking and short code.
@@ -78,7 +78,7 @@ static inline unsigned long __x86_read_cr3(void) {
 	} while (0)
 
 /**
- * Enables Write Protection on x86 CPUs, setting the WP bit in CR0. 
+ * @brief Enables Write Protection on x86 CPUs, setting the WP bit in CR0. 
  * WARNING: According to its dual above, this reenables IRQs, restoring the 
  * saved state provided.
  *

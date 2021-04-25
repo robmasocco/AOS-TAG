@@ -87,7 +87,7 @@ MODULE_PARM_DESC(nr_sysnis, "Number of hackable entries in the "
 extern struct mutex scth_lock;
 
 /**
- * Library cleanup routine: restores entries and frees memory.
+ * @brief Library cleanup routine: restores entries and frees memory.
  */
 void scth_cleanup(void) {
     int i = 0;
@@ -115,7 +115,7 @@ void scth_cleanup(void) {
 }
 
 /**
- * Routine to replace a free entry in the table with a pointer to some other 
+ * @brief Replaces a free entry in the table with a pointer to some other 
  * function.
  *
  * @param new_call_addr Pointer to replace.
@@ -149,7 +149,7 @@ int scth_hack(void *new_call_addr) {
 }
 
 /**
- * Routine to restore an entry in the table.
+ * @brief Restores an entry in the table.
  *
  * @param to_restore Index of the entry to restore.
  */
@@ -180,7 +180,8 @@ void scth_unhack(int to_restore) {
 }
 
 /**
- * Scans the system call table and determines which entries can be hacked later.
+ * @brief Scans the system call table and determines which entries can be 
+ * hacked later.
  *
  * @param table_addr Virtual address of the system call table.
  */
@@ -205,8 +206,8 @@ void scth_scan_table(void **table_addr) {
 }
 
 /**
- * Checks whether a candidate address could point to the system call table by 
- * looking at the entries we know should point to "ni_syscall".
+ * @brief Checks whether a candidate address could point to the system call 
+ * table by looking at the entries we know should point to "ni_syscall".
  *
  * @param addr Virtual address to check.
  * @return Yes or no.
@@ -221,9 +222,9 @@ int scth_pattern_check(void **addr) {
 }
 
 /**
- * Checks whether a candidate address could point to the system call table by 
- * ensuring that "ni_syscall" is pointed only where it should be, especially 
- * not before the first entry we know.
+ * @brief Checks whether a candidate address could point to the system call 
+ * table by ensuring that "ni_syscall" is pointed only where it should be, 
+ * especially not before the first entry we know.
  *
  * @param addr Virtual address to check.
  * @return Yes or no.
@@ -236,9 +237,9 @@ int scth_prev_area_check(void **addr) {
 }
 
 /**
- * Checks whether a given page could contain (part of) the system call table, 
- * performing a linear pattern matching scan. Returns the table base address, 
- * if found.
+ * @brief Checks whether a given page could contain (part of) the system call 
+ * table, performing a linear pattern matching scan. Returns the table base 
+ * address, if found.
  *
  * @param pg Virtual address of the page to check.
  * @return Virtual base address of the UNISTD_64 system call table.
@@ -266,7 +267,7 @@ void **scth_check_page(void *pg) {
 }
 
 /**
- * This function looks for the system call table searching kernel memory in a 
+ * @brief Looks for the system call table searching kernel memory in a 
  * linear fashion. It relies, together with previous routines, on the following 
  * assumptions: 
  * 1 - We can start the search at KERNEL_START_ADDR. 

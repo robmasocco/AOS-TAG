@@ -51,7 +51,7 @@ SplayIntNode *_spli_join(SplayIntNode *left_root, SplayIntNode *right_root);
 
 // LIBRARY FUNCTIONS //
 /**
- * Creates a new Splay Tree.
+ * @brief Creates a new Splay Tree.
  *
  * @return Pointer to the newly created tree, NULL if allocation failed.
  */
@@ -66,7 +66,7 @@ SplayIntTree *create_splay_int_tree(void) {
 }
 
 /**
- * Frees a given Splay Tree.
+ * @brief Frees a given Splay Tree.
  *
  * @param tree Pointer to the tree to free.
  * @return 0 if all went well, or -1 if input args were bad.
@@ -93,7 +93,7 @@ int delete_splay_int_tree(SplayIntTree *tree) {
 }
 
 /**
- * Searches for an entry with the specified key in the tree.
+ * @brief Searches for an entry with the specified key in the tree.
  *
  * @param tree Tree to search into.
  * @param key Key to look for.
@@ -107,7 +107,7 @@ SplayIntNode *splay_int_search(SplayIntTree *tree, int key) {
 }
 
 /**
- * Deletes an entry from the tree.
+ * @brief Deletes an entry from the tree.
  *
  * @param tree Pointer to the tree to delete from.
  * @param key Key to delete from the dictionary.
@@ -136,7 +136,7 @@ int splay_int_delete(SplayIntTree *tree, int key) {
 }
 
 /**
- * Creates and inserts a new node in the tree.
+ * @brief Creates and inserts a new node in the tree.
  *
  * @param tree Pointer to the tree to insert into.
  * @param new_key New key to add to the dictionary.
@@ -177,7 +177,7 @@ ulong splay_int_insert(SplayIntTree *tree, int new_key, int new_data) {
 }
 
 /**
- * Performs a breadth-first search of the tree, the type of which can be 
+ * @brief Performs a breadth-first search of the tree, the type of which can be 
  * specified using the options defined in the header (left or right son 
  * visited first). 
  * Depending on the option specified, returns an array of: 
@@ -251,7 +251,7 @@ void **splay_int_bfs(SplayIntTree *tree, int type, int opts) {
 
 // INTERNAL LIBRARY SUBROUTINES //
 /**
- * Creates a new node. Requires an integer key and some data.
+ * @brief Creates a new node. Requires an integer key and some data.
  *
  * @param new_key Key to add.
  * @param new_data Data to add.
@@ -279,8 +279,8 @@ void _spli_delete_node(SplayIntNode *node) {
 }
 
 /**
- * Inserts a subtree rooted in a given node as the left subtree of a given 
- * node.
+ * @brief Inserts a subtree rooted in a given node as the left subtree of a 
+ * given node.
  *
  * @param father Pointer to the node to root the subtree onto.
  * @param new_son Root of the subtree to add.
@@ -291,8 +291,8 @@ void _spli_insert_left_subtree(SplayIntNode *father, SplayIntNode *new_son) {
 }
 
 /**
- * Inserts a subtree rooted in a given node as the right subtree of a given 
- * node.
+ * @brief Inserts a subtree rooted in a given node as the right subtree of a 
+ * given node.
  *
  * @param father Pointer to the node to root the subtree onto.
  * @param new_son Root of the subtree to add.
@@ -303,7 +303,7 @@ void _spli_insert_right_subtree(SplayIntNode *father, SplayIntNode *new_son) {
 }
 
 /**
- * Cuts and returns the left subtree of a given node.
+ * @brief Cuts and returns the left subtree of a given node.
  *
  * @param father Node to cut the subtree at.
  * @return Pointer to the cut subtree's root.
@@ -317,7 +317,7 @@ SplayIntNode *_spli_cut_left_subtree(SplayIntNode *father) {
 }
 
 /**
- * Cuts and returns the right subtree of a given node.
+ * @brief Cuts and returns the right subtree of a given node.
  *
  * @param father Node to cut the subtree at.
  * @return Pointer to the cut subtree's root.
@@ -331,7 +331,7 @@ SplayIntNode *_spli_cut_right_subtree(SplayIntNode *father) {
 }
 
 /**
- * Returns the descendant of a given node with the greatest key.
+ * @brief Returns the descendant of a given node with the greatest key.
  *
  * @param node Node for which to look for the descendant.
  * @return Pointer to the descendant node.
@@ -343,7 +343,7 @@ SplayIntNode *_spli_max_key_son(SplayIntNode *node) {
 }
 
 /**
- * Returns a pointer to the node with the specified key, or NULL.
+ * @brief Returns a pointer to the node with the specified key, or NULL.
  *
  * @param tree Pointer to the tree to look into.
  * @param key Key to look for.
@@ -365,7 +365,7 @@ SplayIntNode *_spli_search_node(SplayIntTree *tree, int key) {
 }
 
 /**
- * Swaps contents between two nodes.
+ * @brief Swaps contents between two nodes.
  *
  * @param node1 First node.
  * @param node2 Second node.
@@ -382,7 +382,7 @@ void _spli_swap_info(SplayIntNode *node1, SplayIntNode *node2) {
 }
 
 /**
- * Performs a simple right rotation at the specified node.
+ * @brief Performs a simple right rotation at the specified node.
  *
  * @param node Node to rotate onto.
  */
@@ -404,7 +404,7 @@ void _spli_right_rotation(SplayIntNode *node) {
 }
 
 /**
- * Performs a simple left rotation at the specified node.
+ * @brief Performs a simple left rotation at the specified node.
  *
  * @param node Node to rotate onto.
  */
@@ -426,7 +426,7 @@ void _spli_left_rotation(SplayIntNode *node) {
 }
 
 /**
- * Performs a single splay step onto a given node. 
+ * @brief Performs a single splay step onto a given node. 
  * Note that in order to fully splay a node, this has to be called until a 
  * node becomes the tree's root.
  *
@@ -483,7 +483,7 @@ SplayIntNode *_spli_splay(SplayIntNode *node) {
 }
 
 /**
- * Upon deletion, joins two subtrees and returns the new root. 
+ * @brief Upon deletion, joins two subtrees and returns the new root. 
  *
  * @param left_root Pointer to the root node of the left subtree.
  * @param right_root Pointer to the root node of the right subtree.

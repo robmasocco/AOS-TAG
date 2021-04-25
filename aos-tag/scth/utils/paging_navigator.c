@@ -50,7 +50,7 @@
 #define PTE(vaddr)  ((unsigned long long)(vaddr >> 12) & 0x1ffULL)
 
 /**
- * This routine traverses the page table to check if a given virtual address 
+ * @brief Traverses the page table to check if a given virtual address 
  * is mapped onto some physical frame.
  * Helps to prevent General Protection Errors.
  * 
