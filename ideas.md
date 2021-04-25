@@ -8,7 +8,7 @@ Brainstorming table for whatever needs to be discussed before the coding starts.
 - The tag descriptor is an index in a kernel-level shared array of structs: pointers and two rw_semaphores.
 - In the array structs, first things checked by every syscall are the semaphores, then IMMEDIATELY the validity of the pointer.
 - The device file driver only has to scan the array.
-- Permissions are implemented as simple checks of the current EUID against the creator's EUID when a thread calls a *send* or a *receive* on an active instance. Such EUID is stored upon creation of the instance and checked each time it is acted upon.
+- Permissions are implemented as simple checks of the current EUID against the creator's EUID when a thread calls a *send* or a *receive* on an active instance. Such EUID is stored upon creation of the instance and checked each time it is acted upon. As for any service like this, the *root user* (aka EUID 0) can do everything everywhere.
 - When loaded, this does a *try_module_get* on the *scth* module in the *init_module*, which is a dependency, releasing it with a *module_put* in *cleanup_module*.
 - Routines are embedded into functions, to simplify code-writing, system calls definitions and device drivers coding.
 
