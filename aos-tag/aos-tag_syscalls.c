@@ -53,7 +53,7 @@ extern unsigned int max_tags;
 extern unsigned int max_msg_sz;
 
 /**
- * Opens a new instance of the service. 
+ * @brief Opens a new instance of the service. 
  * Instances can be shared or not, depending on the value of key. 
  * An instance can be created or reopened, depending on the value of cmd. 
  * With perm, it is possible to specify whether permission checks should be 
@@ -194,7 +194,7 @@ int aos_tag_get(int key, int cmd, int perm) {
 }
 
 /**
- * Allows a thread to receive a message from a level of an instance. 
+ * @brief Allows a thread to receive a message from a level of an instance. 
  * The instance should have been previously opened with tag_get, however 
  * presence and permissions checks are always performed. 
  * The userspace buffer provided must be large enough to store the new message.
@@ -293,13 +293,13 @@ int aos_tag_rcv(int tag, int lvl, char *buf, size_t size) {
 }
 
 /**
- * Allows a thread to send a message on a level of an instance.
- * The instance should have been previously opened with tag_get, however
- * presence and permissions checks are always performed.
- * I/O is packetized: the entire size of the userspace buffer provided will
- * be copied into kernel space for distribution to readers. The operation will
- * fail if this is not possible.
- * Note that zero-length messages are allowed, and the execution path in such
+ * @brief Allows a thread to send a message on a level of an instance. 
+ * The instance should have been previously opened with tag_get, however 
+ * presence and permissions checks are always performed. 
+ * I/O is packetized: the entire size of the userspace buffer provided will 
+ * be copied into kernel space for distribution to readers. The operation will 
+ * fail if this is not possible. 
+ * Note that zero-length messages are allowed, and the execution path in such 
  * case is simplified.
  *
  * @param tag Tag descriptor of the instance to access.
@@ -401,13 +401,11 @@ int aos_tag_snd(int tag, int lvl, char *buf, size_t size) {
 }
 
 /**
- * Once the tag descriptor has been retrieved via tag_get, allows to control 
- * an instance.
+ * @brief Once the tag descriptor has been retrieved via tag_get, 
+ * allows to control an instance. 
  * Supported commands are: 
  * - TAG_REMOVE: Deletes the instance, freeing the related tag descriptor. 
- * - TAG_AWAKE_ALL: Awakes all threads waiting on all levels. 
- * Returns 0 if the operation was successfully completed, or an error code 
- * used to set errno.
+ * - TAG_AWAKE_ALL: Awakes all threads waiting on all levels.
  *
  * @param tag Tag descriptor of the instance to operate on.
  * @param cmd Operation to perform on the instance.

@@ -8,29 +8,8 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
-#include <errno.h>
-#include <sys/types.h>
 
-int tag_get(int key, int command, int permission) {
-    errno = 0;
-    return syscall(134, key, command, permission);
-}
-
-int tag_receive(int tag, int level, char *buffer, size_t size) {
-    errno = 0;
-    return syscall(174, tag, level, buffer, size);
-}
-
-int tag_send(int tag, int level, char *buffer, size_t size) {
-    errno = 0;
-    return syscall(177, tag, level, buffer, size);
-}
-
-int tag_ctl(int tag, int command) {
-    errno = 0;
-    return syscall(178, tag, command);
-}
+#include "../aos-tag/include/aos-tag.h"
 
 int main(void) {
     int ret;

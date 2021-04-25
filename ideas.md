@@ -416,7 +416,6 @@ Full instance wakeups work in a similar fashion, as is clear from the pseudocode
 # TODO LIST
 
 - Load and unload scripts, that handle *insmod*, *rmmod* and possibly compilation accordingly.
-- Usermode header file and source file with stubs. Remember to set *errno* to zero before any call!
 - Hide debug audits with preprocessor directives.
 - Documentation. Also: words first and pseudocode last.
 
