@@ -1,10 +1,12 @@
 /**
  * @brief Test code for system calls. Will be constantly changed.
  *
- * @author Roberto Masocco
+ * @author Roberto Masocco <robmasocco@gmail.com>
  *
  * @date April 17, 2021
  */
+
+#include "tests_vscode_settings.h"
 
 #include <stdio.h>
 #include <stdlib.h>
