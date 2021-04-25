@@ -292,10 +292,111 @@ int aos_tag_rcv(int tag, int lvl, char *buf, size_t size) {
     return 0;
 }
 
+/**
+ * Allows a thread to send a message on a level of an instance.
+ * The instance should have been previously opened with tag_get, however
+ * presence and permissions checks are always performed.
+ * I/O is packetized: the entire size of the userspace buffer provided will
+ * be copied into kernel space for distribution to readers. The operation will
+ * fail if this is not possible.
+ * Note that zero-length messages are allowed, and the execution path in such
+ * case is simplified.
+ *
+ * @param tag Tag descriptor of the instance to access.
+ * @param lvl Level of the aforementioned instance to write into.
+ * @param buf Userspace buffer holding the message to send.
+ * @param size Size of the aforementioned buffer.
+ * @return 0 if the message was successully sent, or an error code for errno.
+ */
 int aos_tag_snd(int tag, int lvl, char *buf, size_t size) {
+    tag_t *tag_inst;
+    char *new_msg;
+    unsigned char lvl_epoch;
     // TODO Debug.
     printk(KERN_INFO "%s: tag_send: Called with (%d, %d, 0x%px, %lu).\n",
         MODNAME, tag, lvl, buf, size);
+    // Consistency checks on input arguments.
+    if ((tag < 0) || (tag >= max_tags) || ((size != 0) && (buf == NULL)) ||
+        (lvl < 0) || (lvl >= __NR_LEVELS)) return -EINVAL;
+    // First, check if the instance exists and we're allowed to access it.
+    if (down_read_killable(&(tags_list[tag].snd_rwsem)) == -EINTR)
+        return -EINTR;
+    tag_inst = tags_list[tag].ptr;
+    if (tag_inst == NULL) {
+        // Instance is not there anymore, or yet.
+        up_read(&(tags_list[tag].snd_rwsem));
+        return -EIDRM;
+    }
+    if ((tag_inst->perm_check) && (current_euid().val != 0) &&
+        (tag_inst->creator_euid.val != current_euid().val)) {
+        // We're not allowed to send messages on this instance.
+        up_read(&(tags_list[tag].snd_rwsem));
+        return -EACCES;
+    }
+    // We're in.
+    if (size != 0) {
+        unsigned long not_copied = 0;
+        // Bring the new message in kernel space.
+        new_msg = (char *)kzalloc(size, GFP_KERNEL);
+        if (unlikely(new_msg == NULL)) {
+            up_read(&(tags_list[tag].snd_rwsem));
+            return -ENOMEM;
+        }
+        not_copied = copy_from_user(new_msg, buf, size);
+        asm volatile ("mfence" ::: "memory");
+        if (not_copied != 0) {
+            // copy_from_user failed. Since it shouldn't, this service doesn't
+            // retry, so the operation is aborted.
+            up_read(&(tags_list[tag].snd_rwsem));
+            kfree(new_msg);
+            return -ECANCELED;
+        }
+    }
+    // Acquire the right to send a message, and mark the start of the delivery.
+    if (mutex_lock_interruptible(&((tag_inst->snd_locks)[lvl])) == -EINTR) {
+        // Message delivery has been aborted with a signal.
+        up_read(&(tags_list[tag].snd_rwsem));
+        if (size != 0) kfree(new_msg);
+        return -EINTR;
+    }
+    lvl_epoch = TAG_COND_FLIP(&((tag_inst->lvl_conds)[lvl]));
+    if (!TAG_COND_COUNT(&((tag_inst->lvl_conds)[lvl]), lvl_epoch)) {
+        // No one is waiting for this message: discard it.
+        mutex_unlock(&((tag_inst->snd_locks)[lvl]));
+        up_read(&(tags_list[tag].snd_rwsem));
+        if (size != 0) kfree(new_msg);
+        // TODO Debug.
+        printk(KERN_DEBUG "%s: tag_send: Discarded message on tag: %d, "
+                          "level: %d.\n", MODNAME, tag, lvl);
+        return 0;
+    }
+    // Now we actually have someone to deliver to.
+    if (size != 0) tag_inst->msg_bufs[lvl] = new_msg;
+    tag_inst->mgs_sizes[lvl] = size;
+    asm volatile ("sfence" ::: "memory");
+    TAG_COND_VAL(&((tag_inst->lvl_conds)[lvl]), lvl_epoch) = 0x1;
+    asm volatile ("sfence" ::: "memory");
+    // Wake up the current epoch's wait queue.
+    wake_up_all(&((tag_inst->lvl_queues)[lvl][lvl_epoch]));
+    // Wait for receivers to consume both the message and the condition.
+    // Since busy-wait loops are bad in the kernel let the scheduler run
+    // some other task on this CPU in the meantime.
+    while (TAG_COND_COUNT(&((tag_inst->lvl_conds)[lvl]), lvl_epoch) != 0)
+        // Note that due to the tag_rcv behavior, the aforementioned
+        // counter will reach zero, independently of the readers terminating
+        // gracefully or not, so this thread will never become an
+        // unkillable idle process *knocks on wood*.
+        schedule();
+    // All done!
+    if (size != 0) tag_inst->msg_bufs[lvl] = NULL;
+    tag_inst->mgs_sizes[lvl] = 0;
+    asm volatile ("sfence" ::: "memory");
+    mutex_unlock(&((tag_inst->snd_locks)[lvl]));
+    up_read(&(tags_list[tag].snd_rwsem));
+    if (size != 0) kfree(new_msg);
+    // TODO Debug.
+    printk(KERN_DEBUG "%s: tag_send: Delivered %lu byte(s) message on tag: %d,"
+                      " level: %d.\n", MODNAME, size, tag, lvl);
     return 0;
 }
 
@@ -360,7 +461,7 @@ int aos_tag_ctl(int tag, int cmd) {
         // Wait for receivers to consume the condition.
         // Since busy-wait loops are bad in the kernel let the scheduler run
         // some other task on this CPU in the meantime.
-        while (TAG_COND_COUNT(&(tag_inst->globl_cond), last_epoch) > 0)
+        while (TAG_COND_COUNT(&(tag_inst->globl_cond), last_epoch) != 0)
             // Note that due to the tag_rcv behavior, the aforementioned
             // counter will reach zero, independently of the readers terminating
             // gracefully or not, so this thread will never become an

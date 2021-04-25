@@ -60,9 +60,9 @@ Each of the aforementioned steps must at least be attempted, in order to remove 
 ### Module locking
 
 A very simple module locking scheme is implemented in this project to ensure that syscalls do not end up operating on stale, inconsistent, not-anymore-present data (especially blocking ones), possibly causing kernel oopses or worse.
-The *SCTH* module is a dependency, so it is locked as first thing and released upon module removal.
+The *SCTH* module is a dependency, so it is locked upon insertion and released upon removal.
 Then, in its wrapper, each system call does a *try_module_get(THIS_MODULE)* before attempting to execute its real code.
-**Note that, due to how the module locking feature is implemented in the Linux kernel, this still leaves room for some really impossible race conditions that would consist in a system call executing code that lies in a released memory region (the part before the _try\_module\_get_). This is the best that we can do. Causing the aforementioned condition during normal execution would require surgical scheduler precision, excellent timing, and a strong will to wreak havoc. We assume that a user knows when to remove the module, and do all that is possible to prevent any damage anywhere we can.**
+**Note that, due to how the module locking feature is implemented in the Linux kernel, this still leaves room for some really impossible race conditions that would consist in a system call executing code that lies in a released memory region (the part before the _try\_module\_get_). This is the best that we can do. Causing the aforementioned condition during normal execution would require surgical scheduler precision, excellent timing, and a strong will to wreak havoc. We assume that a user knows when to remove the module, and do all that is possible to prevent damage anywhere we can.**
 
 # OPERATIONS DETAILS
 
@@ -161,8 +161,9 @@ Returns 0 if the message was correctly sent, or -1 and *errno* is set to indicat
 - Atomically read the current *epoch presence counter* from the level condition struct: exit if it is zero (no one is waiting for a message on this level, so discard yours). Remember to free the buffer!
 - Set the level message pointer to the new buffer.
 - Set message size.
+- **STORE FENCE**
 - Set the now "old" level condition to 0x1.
-- **STORE FENCE** (One can never be too sure.)
+- **STORE FENCE**
 - Wake up the current epoch's level wait queue (use *wake_up_all(...)*).
     Note that the APIs used prevent the "Lost wake-up problem".
     Also note that this call grabs the queue spinlock, wakes all readers that "got the message" in a single pass and then releases the queue spinlock. We're sure that all the threads that are in here must be awoken and are those that actually got the message, while those that came too late have been diverted onto the other queue.
@@ -199,7 +200,7 @@ Returns 0 if the requested operation was completed successfully, or -1 and *errn
     - **MEMORY FENCE**
     - Release instance condition spinlock.
     - Set the now "old" global condition to 0x1.
-    - **STORE FENCE** (One can never be too sure.)
+    - **STORE FENCE**
     - For each level in the instance:
         - Wake up both level wait queues (use *wake_up_all(...)*).
             Note that the APIs used prevent the "Lost wake-up problem".
