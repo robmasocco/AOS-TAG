@@ -34,7 +34,7 @@
 #include <linux/errno.h>
 #include <linux/compiler.h>
 
-#include "include/aos-tag_defs.h"
+#include "include/aos-tag.h"
 #include "include/aos-tag_types.h"
 #include "include/aos-tag_syscalls.h"
 

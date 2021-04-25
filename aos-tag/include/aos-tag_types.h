@@ -30,7 +30,7 @@
 #include <linux/cred.h>
 #include <linux/wait.h>
 
-#include "aos-tag_defs.h"
+#include "aos-tag.h"
 #include "../utils/aos-tag_conditions.h"
 
 /** 

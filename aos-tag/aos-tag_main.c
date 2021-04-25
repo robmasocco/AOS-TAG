@@ -33,9 +33,9 @@
 
 #include "scth/include/scth.h"
 
+#include "include/aos-tag.h"
 #include "include/aos-tag_types.h"
 #include "include/aos-tag_syscalls.h"
-#include "include/aos-tag_defs.h"
 #include "include/aos-tag_dev-driver.h"
 
 #include "utils/aos-tag_bitmask.h"
