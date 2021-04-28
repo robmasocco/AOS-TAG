@@ -20,3 +20,75 @@
  *
  * @date April 10, 2021
  */
+
+#include <linux/kernel.h>
+#include <linux/module.h>
+#include <linux/fs.h>
+#include <linux/vmalloc.h>
+
+#include "include/aos-tag.h"
+#include "include/aos-tag_dev-driver.h"
+#include "include/aos-tag_types.h"
+
+extern int tag_drv_major;
+
+/* AOS-TAG service character device driver. */
+struct file_operations tag_fops = {
+    .owner = THIS_MODULE,
+    .open = aos_tag_open,
+    .read = aos_tag_read,
+    .write = aos_tag_write,
+    .release = aos_tag_release
+};
+
+/**
+ * @brief Opens a new session for the device file. 
+ * Takes a snapshot of the status of the system by scanning the instances array. 
+ * Then, creates a fake text file in kernel memory: the data for the current
+ * session.
+ *
+ * @param inode Device file inode.
+ * @param file Device file struct.
+ * @return 0, or error code for errno.
+ */
+int aos_tag_open(struct inode *inode, struct file *file) {
+
+}
+
+/**
+ * @brief Read operation: returns some content from the fake text file.
+ *
+ * @param file Device file struct.
+ * @param buf Userspace buffer address.
+ * @param size Size of the aforementioned buffer.
+ * @param off Offset at which to start reading.
+ * @return Number of bytes read, or error code for errno.
+ */
+ssize_t aos_tag_read(struct file *file, char *buf, size_t size, loff_t *off) {
+
+}
+
+/**
+ * @brief Write operation: a nop.
+ *
+ * @param file Device file struct.
+ * @param buf Userspace buffer address.
+ * @param size Size of the aforementioned buffer.
+ * @param off Offset to write to.
+ * @return Number of bytes written, or error code for errno.
+ */
+ssize_t aos_tag_write(struct file *file, const char *buf, size_t size,
+                      loff_t *off) {
+    return -EPERM;
+}
+
+/**
+ * @brief When the last session is closed, releases the fake file.
+ *
+ * @param inode Device file inode.
+ * @param file Device file struct.
+ * @return 0, or error code for errno.
+ */
+int aos_tag_release(struct inode *inode, struct file *file) {
+
+}

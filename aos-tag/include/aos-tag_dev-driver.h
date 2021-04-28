@@ -20,3 +20,19 @@
  *
  * @date April 10, 2021
  */
+
+#ifndef _AOS_TAG_DEVDRIVER_H
+#define _AOS_TAG_DEVDRIVER_H
+
+#include <linux/fs.h>
+#include <linux/types.h>
+
+#define STATUS_DEVFILE "aos_tag_status"
+
+int aos_tag_open(struct inode *inode, struct file *file);
+int aos_tag_release(struct inode *inode, struct file *file);
+ssize_t aos_tag_read(struct file *file, char *buf, size_t size, loff_t *off);
+ssize_t aos_tag_write(struct file *file, const char *buf, size_t size,
+                      loff_t *off);
+
+#endif

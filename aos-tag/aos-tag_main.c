@@ -26,6 +26,7 @@
 #include <linux/types.h>
 #include <linux/slab.h>
 #include <linux/syscalls.h>
+#include <linux/fs.h>
 #include <linux/rwsem.h>
 #include <linux/errno.h>
 #include <linux/version.h>
@@ -127,7 +128,7 @@ __SYSCALL_DEFINEx(2, _tag_ctl, int, tag, int, cmd) {
     return ret;
 }
 
-// TODO Device driver stuff.
+extern struct file_operations tag_fops;
 
 /* Required module's reference. */
 struct module *scth_mod;
@@ -220,7 +221,8 @@ int init_module(void) {
         tag_receive_nr);
     printk(KERN_INFO "%s: tag_send installed at %d.\n", MODNAME, tag_send_nr);
     printk(KERN_INFO "%s: tag_ctl installed at %d.\n", MODNAME, tag_ctl_nr);
-    // TODO Device driver major number printk.
+    printk(KERN_INFO "%s: Device driver registered with major number: %d.\n",
+           MODNAME, tag_drv_major);
     return 0;
 }
 
