@@ -417,13 +417,15 @@ Full instance wakeups work in a similar fashion, as is clear from the pseudocode
 
 - Load and unload scripts, that handle *insmod*, *rmmod* and possibly compilation accordingly.
 - Hide debug audits with preprocessor directives.
-- Documentation. Also: words first and pseudocode last.
+- Try to remove memory fences and compiler barriers next to synchronization primitives operations.
+- Documentation.
 
 # EXTRAS
 
 - Definitions of system call numbers for the user code given by *make* after module insertion using *awk* to read numbers from pseudofiles.
 - *__randomize_layout* of some structs?
 - Docs in here:
+    - Words first, pseudocode last. Maybe a totally different file for that.
     - A README for SCTH.
         Mention that we left it as a secondary module to experiment with exported symbols, module dependencies, and module locking, but that for simplicity we just modified it a tad bit, i.e. we added a mutex to make operations atomic.
     - Usage manual, in the main page.
