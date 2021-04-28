@@ -202,6 +202,10 @@ int init_module(void) {
         (tag_receive_nr == -1) ||
         (tag_send_nr == -1) ||
         (tag_ctl_nr == -1)) {
+        if (tag_get_nr != -1) scth_unhack(tag_get_nr);
+        if (tag_receive_nr != -1) scth_unhack(tag_receive_nr);
+        if (tag_send_nr != -1) scth_unhack(tag_send_nr);
+        if (tag_ctl_nr != -1) scth_unhack(tag_ctl_nr);
         printk(KERN_ERR "%s: Failed to install system calls.\n", MODNAME);
         module_put(scth_mod);
         delete_splay_int_tree(shared_bst);
