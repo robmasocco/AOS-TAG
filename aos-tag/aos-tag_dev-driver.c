@@ -26,6 +26,7 @@
 #include <linux/fs.h>
 #include <linux/cdev.h>
 #include <linux/vmalloc.h>
+#include <linux/uaccess.h>
 #include <linux/cred.h>
 #include <linux/types.h>
 
