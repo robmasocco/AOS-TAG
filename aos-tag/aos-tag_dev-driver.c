@@ -30,6 +30,7 @@
 #include <linux/uaccess.h>
 #include <linux/cred.h>
 #include <linux/rwsem.h>
+#include <linux/string.h>
 #include <linux/types.h>
 
 #include "include/aos-tag.h"
@@ -37,7 +38,10 @@
 #include "include/aos-tag_types.h"
 
 /* Magic number: expected maximum status file line length, given its content. */
-#define __STAT_LINE_SZ (54 + 1)  // Remember the null terminator.
+#define __STAT_LINE_LEN 54
+
+/* As LEN, but considering the null terminator. */
+#define __STAT_LINE_SZ (__STAT_LINE_LEN + 1)
 
 extern int tag_drv_major;
 extern unsigned int max_tags;
@@ -92,7 +96,8 @@ int aos_tag_open(struct inode *inode, struct file *filp) {
     char *write_ptr;
     tag_stat_t *new_stat;
     tag_snap_t *snaps;
-    unsigned int tag;
+    unsigned int tag, valid_cnt = 0;
+    size_t new_stat_sz;
     // Consistency checks.
     if ((inode == NULL) || (filp == NULL)) return -EINVAL;
     // Allocate memory for the new objects.
@@ -125,6 +130,7 @@ int aos_tag_open(struct inode *inode, struct file *filp) {
         }
         // Get instance and levels status.
         snaps[tag].valid = 0x1;
+        valid_cnt++;
         snaps[tag].key = curr_tag->key;
         snaps[tag].c_euid.val = curr_tag->creator_euid.val;
         for (lvl = 0; lvl < __NR_LEVELS; lvl++) {
@@ -136,7 +142,25 @@ int aos_tag_open(struct inode *inode, struct file *filp) {
         up_read(&(tags_list[tag].snd_rwsem));
     }
     // Second pass: build the fake text file contents.
-    // TODO Handle the "empty file" scenario.
+    // Compute text size.
+    new_stat_sz = valid_cnt * __NR_LEVELS * __STAT_LINE_LEN;
+    if (new_stat_sz == 0) {
+        // This will result in an immediate EOF.
+        new_stat->stat_data = NULL;
+        new_stat->stat_len = 0;
+    } else {
+        // Allocate (a lot of) memory for the fake text file.
+        write_ptr = (char *)vzalloc(new_stat_sz);
+        if (write_ptr == NULL) {
+            kfree(snaps);
+            kfree(new_stat);
+            return -ENOMEM;
+        }
+        new_stat->stat_len = new_stat_sz;
+        new_stat->stat_data = write_ptr;
+        // "Print" lines.
+        // TODO
+    }
     // Set session data and we're done.
     kfree(snaps);
     filp->private_data = (void *)new_stat;
@@ -165,7 +189,8 @@ ssize_t aos_tag_read(struct file *filp, char *buf, size_t size, loff_t *off) {
     file_buf = stat->stat_data;
     file_sz = stat->stat_len;
     // Check for EOF condition.
-    if (*off >= file_sz) return 0;  // This SHOULD be interpreted as EOF.
+    if ((*off >= file_sz) || (stat->stat_len == 0))
+        return 0;  // This SHOULD be interpreted as EOF.
     // Determine the correct amount of data to copy.
     // Didn't know that this macro existed but many thanks to its author.
     to_copy = min((unsigned long)size, file_sz - (unsigned long)*off);
