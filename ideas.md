@@ -1,7 +1,5 @@
 # GENERAL ARCHITECTURE NOTES
 
-Brainstorming table for whatever needs to be discussed before the coding starts.
-
 ## KERNEL-SIDE ARCHITECTURE
 
 - Centralized architecture: there's only one binary search tree to lookup active instances, register new ones, or delete existing ones from. Indexed by keys, each entry contains the tag descriptor for that instance, if present. Only for shared instances.
@@ -17,12 +15,10 @@ Brainstorming table for whatever needs to be discussed before the coding starts.
 - Represents key-instance associations.
 - Is indexed by int keys.
 - Each entry is an int "tag descriptor", index in the array.
-- Must be optimized for speed, "cache-like".
+- Must be optimized for speed, "cache-like", so a splay tree should fit right in.
 - Must be protected from concurrent access; see below.
-- Splay trees might be a good idea, using join-based alternative for deletion (to avoid splaying the predecessor to the top)
-    and make nodes (structures) cache-aligned (in GCC: "struct ... {...} ... \__attribute__ ((aligned (L1_CACHE_BYTES)));"). See [here](https://en.wikipedia.org/wiki/Splay_tree).
 
-## MODULE MANAGEMENT ROUTINES
+## MODULE MANAGEMENT
 
 ### *init_module*
 
@@ -36,11 +32,11 @@ Brainstorming table for whatever needs to be discussed before the coding starts.
     - Set the instance struct pointer to *NULL*.
     - Initialize the rw_sems.
 - Register the device driver.
-- Create the VFS node in */dev* (see [here](https://stackoverflow.com/questions/49350553/can-i-call-mknod-from-my-kernel-module)). See below for the name.
+- Create the VFS node in */dev*.
 - Hack the system call table and install the new calls.
     This is the most critical and hazardous step so we do it now, when it's almost sure we got this.
 
-If any of the aforementioned steps fails, the routine should terminate releasing all resources, with an appropriate error code.
+If any of the aforementioned steps fails, the routine terminates releasing all resources up to that point, returning an appropriate error code.
 
 ### *cleanup_module*
 
@@ -276,8 +272,6 @@ Numeric fields are accessed using atomic operations, with the *RELAXED* memory o
 
 # MODULE PARAMETERS
 
-Consider adding anything you might need to debug this module.
-
 - System call numbers (one pseudofile each) (read-only).
 - Device driver major number (read-only).
 - Max number of active instances (configurable at insertion but checked: must not drop below 256) (read-only).
@@ -285,89 +279,31 @@ Consider adding anything you might need to debug this module.
 
 # CHAR DEVICE DRIVER
 
-**Remember to set the *owner* member to _THIS\_MODULE_!**
+This module includes a character device driver that allows every user to check the current state of the service.
+A device file, */dev/aos_tag_status*, can be accessed and read entirely to end up with a text file that sums up the service's status.
+Suggested programs for this are:
 
-Compute a fair exceeding estimate of the buffer size in *init_module*, using 80 chars lines * 32 levels * how many max instances the module is started with.
+- *cat*
+- *less -f*
 
-Return *-ENOMEM* or similar on *open* if allocation fails or memory is insufficient.
-
-Write stuff on lines, separating data with tabs.
-
-Compute the size of the file as you produce it with subsequent calls to _snprintf_.
-
-Operations marked as *nops* should return some kind of *errno* value to indicate that they're not implemented.
+Each line of the status device file describes a level of an active instance, with the following format:
+**KEY    CREATOR EUID    LEVEL    WAITING THREADS**
+Only active, i.e. opened by at least one thread, instances are described in this file.
 
 ## OPEN
 
 Takes a snapshot of the state of the AOS-TAG service and saves it in text form in a buffer, which acts as the file.
-Such buffer is allocated with *vmalloc* instead of *kmalloc*, to avoid putting too much strain on the buddy allocators requesting many contiguous pages if the device file is opened many times.
-
+Such buffer is allocated with *vmalloc* instead of *kmalloc*, to avoid putting too much strain on the buddy allocators requesting many contiguous pages if the device file is opened many times. The buffer is then linked to the session accessing the *private_data* member of the *struct_file*.
+The snapshot is taken by scanning the instances array and accessing only active instances. To do so, the senders rw_sem is acquired as reader, as explained in the Synchronization section.
 Returns 0 if all was done successfully and the "file" is ready, or -1 and *errno* is set to indicate the cause of the error.
-
-Keep in mind that all data that forms the status of the system is at most 32 bits-long, so many unsigned ints and type casts should suffice.
-
-- Allocate a *line buffer* (80 chars) in the stack.
-- Allocate a 32-entries unsigned int array in the stack, for readers presence counters.
-- Allocate two unsigned ints, for the key and the creator EUID.
-- *vzalloc* a *file buffer* which will hold the file's contents, size: *max_instances* * *32 (levels)* * *80 (chars)*.
-- Allocate a _char *_ in the stack that for now points to the base of the aforementioned buffer.
-- For each entry in the instance struct array:
-    - Trylock senders rw_sem as reader, *continue* if it fails (means that the instance is unavailable: it is being removed or created).
-    - If the instance struct pointer is not *NULL*:
-        - Get the key, the creator EUID and (atomically) the current epoch receivers presence counters (in another *for* loop).
-            Keep in mind that this is just a snapshot: we make the best effort we can at reading what is currently happening in the system, among all the possible race conditions that can occur, but that are don't cares for us since in the moment we got to read the status of that level, that was the epoch it was in. Thus, we just atomically read values without grabbing any lock.
-        - **STORE FENCE**
-        - Release senders rw_sem as reader.
-        - For each of the 32 levels:
-            - *memset* the line buffer to 0.
-            - *scnprintf* status information in the line buffer: "TAG-key TAG-creator TAG-level Waiting-threads", writing at most 80 chars. Get the number of bytes written, it'll be useful in a moment.
-            - *memcpy* the contents of the line buffer in the file buffer. Add a newline character at the end.
-            - Advance the pointer accordingly.
-    - Else: release senders's rw_sem as reader.
-- Set the *private_data* member of the current *struct file* to the file buffer base.
-- Set all other required data, like *f_pos* and stuff. Is file size necessary?
-- Return.
-
-Again, be sure to release all locks and memory areas on any *if-else* sequence and exit.
 
 ## CLOSE
 
-- *vfree* the buffer.
-- Set *private_data* to *NULL*.
-- Return 0. Nothing can go wrong.
+Free all structures and text buffers.
 
 ## READ
 
-*copy_to_user* stuff from the file buffer, with size checks, return values, EOF setting, f_pos advancing and stuff.
-
-## LSEEK
-
-Reset *f_pos* as requested (if possible).
-
-## WRITE
-
-Nop.
-
-## IOCTL
-
-Nop.
-
-## Any other op that might be required to make this work
-
-Nop.
-
-# DEVICE FILE(s)
-
-A char device driver is required for these, maybe more than one or some minor-based behaviour.
-
-## STATUS
-As requested, line-by-line status report. Located in /dev. Named */dev/aos_tag*.
-
-## I/O (?)
-
-A generic userland thread becomes a writer/reader through these device files.
-What about *IPC_PRIVATE*? Which routines would need to be called?
-Develop the baseline version first, then make sure it is doable and discuss it with Quaglia to avoid conflicts with the specification. Could be a nice addition. Might require an extension of the original driver using the minor number. Might be *ioctl*-based.
+*copy_to_user* stuff from the file buffer, with size checks, return values, EOF setting, loff advancing and stuff.
 
 # SYNCHRONIZATION
 
@@ -399,7 +335,7 @@ These are both real locks since potential writers are *removers* and *adders*, b
 
 Things are a little bit different when *adding* an instance: at first, the bitmask is atomically checked for a free spot, then the *adder* thread locks both rw_sems as a writer since being the pointer *NULL*, eventual readers/writers would almost immediately get out, then sets the pointer to that of a new instance struct. The BST is kept locked during this in order to avoid adding a same key possibly multiple times.
 
-Also, threads that come from the VFS while doing an *open* must synchronize with *adders* and *removers* to take a snapshot of each instance before it fades away. This can be accomplished by locking the senders rw_sem and checking the instance pointer. Using the receivers one causes a false positive for removers that want to check if no reader is there, this way they'd only have to wait for the snapshot to be taken since these threads deterministically release this rw_sem shortly after.
+Also, threads that come from the VFS while doing an *open* must synchronize with *adders* and *removers* to take a snapshot of each instance before it fades away. This can be accomplished by trylocking the senders rw_sem and checking the instance pointer. Using the receivers one causes a false positive for removers that want to check if no reader is there, this way they'd only have to wait for the snapshot to be taken since these threads deterministically release this rw_sem shortly after. Also, if the trylock fails it means the instance is being either created or removed, so the thread got there too early or late respectively.
 
 ## POSTING A MESSAGE ON A LEVEL
 
@@ -422,9 +358,9 @@ Full instance wakeups work in a similar fashion, as is clear from the pseudocode
 
 # EXTRAS
 
-- Definitions of system call numbers for the user code given by *make* after module insertion using *awk* to read numbers from pseudofiles.
+- Definitions of system call numbers for the user code given by *make* after module insertion using *awk*/*sed* to read numbers from pseudofiles and generate the header.
 - *__randomize_layout* of some structs?
-- Docs in here:
+- Docs:
     - Words first, pseudocode last. Maybe a totally different file for that.
     - A README for SCTH.
         Mention that we left it as a secondary module to experiment with exported symbols, module dependencies, and module locking, but that for simplicity we just modified it a tad bit, i.e. we added a mutex to make operations atomic.
