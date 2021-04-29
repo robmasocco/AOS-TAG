@@ -97,10 +97,10 @@ int aos_tag_open(struct inode *inode, struct file *filp) {
  * @return Number of bytes read, or error code for errno.
  */
 ssize_t aos_tag_read(struct file *filp, char *buf, size_t size, loff_t *off) {
-    ssize_t copied;
     tag_stat_t *stat;
     char *file_buf;
     size_t file_sz;
+    unsigned long to_copy, copied;
     // Consistency checks.
     if ((filp == NULL) || (buf == NULL) || (off == NULL) || (*off < 0) ||
         (size == 0))
@@ -108,11 +108,15 @@ ssize_t aos_tag_read(struct file *filp, char *buf, size_t size, loff_t *off) {
     file_buf = stat->stat_data;
     file_sz = stat->stat_len;
     // Check for EOF condition.
-    if (*off >= file_sz) return 0;
-    // TODO
+    if (*off >= file_sz) return 0;  // This SHOULD be interpreted as EOF.
+    // Determine the correct amount of data to copy.
+    // Didn't know that this macro existed but many thanks to its author.
+    to_copy = min((unsigned long)size, file_sz - (unsigned long)*off);
+    copied = to_copy - copy_to_user(buf, file_buf + *off, to_copy);
+    if (copied == 0) return -EFAULT;
     // Update file offset and we're done.
     *off += copied;
-    return copied;
+    return (ssize_t)copied;
 }
 
 /**
