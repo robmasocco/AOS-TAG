@@ -29,6 +29,7 @@
 #include <linux/vmalloc.h>
 #include <linux/uaccess.h>
 #include <linux/cred.h>
+#include <linux/rwsem.h>
 #include <linux/types.h>
 
 #include "include/aos-tag.h"
@@ -88,12 +89,54 @@ struct class *tag_status_cls;
  */
 int aos_tag_open(struct inode *inode, struct file *filp) {
     char new_line[__STAT_LINE_SZ];
+    char *write_ptr;
     tag_stat_t *new_stat;
     tag_snap_t *snaps;
-    unsigned int i;
+    unsigned int tag;
     // Consistency checks.
     if ((inode == NULL) || (filp == NULL)) return -EINVAL;
     // Allocate memory for the new objects.
+    new_stat = (tag_stat_t *)kzalloc(sizeof(tag_stat_t), GFP_KERNEL);
+    if (new_stat == NULL) return -ENOMEM;
+    snaps = (tag_snap_t *)kzalloc(max_tags * sizeof(tag_snap_t), GFP_KERNEL);
+    if (snaps == NULL) {
+        kfree(new_stat);
+        return -ENOMEM;
+    }
+    // First pass: linear scan of the instance array to get a snapshot of the
+    // current status of the service.
+    // Note that, being this a snapshot, we don't grab any lock, and don't care
+    // about race conditions at all.
+    for (tag = 0; tag < max_tags; tag++) {
+        tag_t *curr_tag;
+        unsigned int lvl;
+        unsigned char curr_epoch;
+        if (down_read_trylock(&(tags_list[tag].snd_rwsem)) == 0) {
+            // Instance is being created or removed AKA busy: we are too late.
+            snaps[tag].valid = 0x0;
+            continue;
+        }
+        curr_tag = tags_list[tag].ptr;
+        if (curr_tag == NULL) {
+            // Instance not present.
+            up_read(&(tags_list[tag].snd_rwsem));
+            snaps[tag].valid = 0x0;
+            continue;
+        }
+        // Get instance and levels status.
+        snaps[tag].valid = 0x1;
+        snaps[tag].key = curr_tag->key;
+        snaps[tag].c_euid.val = curr_tag->creator_euid.val;
+        for (lvl = 0; lvl < __NR_LEVELS; lvl++) {
+            curr_epoch = (curr_tag->lvl_conds)[lvl]._cond_epoch;
+            snaps[tag].readers_cnts[lvl] =
+                (curr_tag->lvl_conds)[lvl]._pres_count[curr_epoch];
+        }
+        asm volatile ("sfence" ::: "memory");
+        up_read(&(tags_list[tag].snd_rwsem));
+    }
+    // Second pass: build the fake text file contents.
+    // TODO Handle the "empty file" scenario.
     // Set session data and we're done.
     kfree(snaps);
     filp->private_data = (void *)new_stat;
