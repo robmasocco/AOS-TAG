@@ -32,6 +32,7 @@
 #include <linux/rwsem.h>
 #include <linux/string.h>
 #include <linux/types.h>
+#include <linux/compiler.h>
 
 #include "include/aos-tag.h"
 #include "include/aos-tag_dev-driver.h"
@@ -84,7 +85,7 @@ struct class *tag_status_cls;
 /**
  * @brief Opens a new session for the device file. 
  * Takes a snapshot of the status of the system by scanning the instances array. 
- * Then, creates a fake text file in kernel memory: the data for the current
+ * Then, creates a fake text file in kernel memory: the data for the current 
  * session.
  *
  * @param inode Device file inode.
@@ -92,7 +93,6 @@ struct class *tag_status_cls;
  * @return 0, or error code for errno.
  */
 int aos_tag_open(struct inode *inode, struct file *filp) {
-    char new_line[__STAT_LINE_SZ];
     char *write_ptr;
     tag_stat_t *new_stat;
     tag_snap_t *snaps;
@@ -142,13 +142,16 @@ int aos_tag_open(struct inode *inode, struct file *filp) {
         up_read(&(tags_list[tag].snd_rwsem));
     }
     // Second pass: build the fake text file contents.
-    // Compute text size.
+    // Compute text length.
     new_stat_sz = valid_cnt * __NR_LEVELS * __STAT_LINE_LEN;
     if (new_stat_sz == 0) {
         // This will result in an immediate EOF.
         new_stat->stat_data = NULL;
         new_stat->stat_len = 0;
     } else {
+        char new_line[__STAT_LINE_SZ];
+        int chars;
+        unsigned int lvl;
         // Allocate (a lot of) memory for the fake text file.
         write_ptr = (char *)vzalloc(new_stat_sz);
         if (write_ptr == NULL) {
@@ -156,14 +159,36 @@ int aos_tag_open(struct inode *inode, struct file *filp) {
             kfree(new_stat);
             return -ENOMEM;
         }
-        new_stat->stat_len = new_stat_sz;
         new_stat->stat_data = write_ptr;
         // "Print" lines.
-        // TODO
+        for (tag = 0; tag < max_tags; tag++) {
+            if (!(snaps[tag].valid)) continue;
+            for (lvl = 0; lvl < __NR_LEVELS; lvl++) {
+                memset(new_line, 0, __STAT_LINE_SZ);
+                chars = scnprintf(new_line, __STAT_LINE_SZ,
+                                  "%d\t%u\t%u\t%lu\n",
+                                  snaps[tag].key,
+                                  snaps[tag].c_euid.val,
+                                  lvl,
+                                  snaps[tag].readers_cnts[lvl]);
+                if (unlikely(!chars)) {
+                    printk(KERN_ERR "%s: Failed to \"print\" line in file.\n",
+                           MODNAME);
+                    kfree(snaps);
+                    vfree(new_stat->stat_data);
+                    kfree(new_stat);
+                    return -EFAULT;
+                }
+                memcpy(write_ptr, new_line, chars);
+                write_ptr += chars;
+                new_stat->stat_len += chars;
+            }
+        }
     }
     // Set session data and we're done.
     kfree(snaps);
     filp->private_data = (void *)new_stat;
+    asm volatile ("sfence");
     return 0;
 }
 
