@@ -103,7 +103,7 @@ ssize_t aos_tag_write(struct file *filp, const char *buf, size_t size,
  * @return 0, or error code for errno.
  */
 long aos_tag_ioctl(struct file *filp, unsigned int cmd, unsigned long param) {
-    return -ENOSYS;
+    return -EPERM;
 }
 
 /**
@@ -114,5 +114,7 @@ long aos_tag_ioctl(struct file *filp, unsigned int cmd, unsigned long param) {
  * @return 0, or error code for errno.
  */
 int aos_tag_release(struct inode *inode, struct file *filp) {
+    vfree(filp->private_data);
+    filp->private_data = NULL;
     return 0;
 }
