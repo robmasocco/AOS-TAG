@@ -27,8 +27,8 @@
 #include <linux/fs.h>
 #include <linux/types.h>
 
-#define DRVNAME "aos_tag_dev"
-#define STATUS_DEVFILE "aos_tag_status"
+#define __DRVNAME "aos_tag_dev"
+#define __STAT_DEVFILE "aos_tag_status"
 
 int aos_tag_open(struct inode *inode, struct file *filp);
 int aos_tag_release(struct inode *inode, struct file *filp);
