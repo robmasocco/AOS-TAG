@@ -26,11 +26,15 @@
 #include <linux/fs.h>
 #include <linux/cdev.h>
 #include <linux/vmalloc.h>
+#include <linux/cred.h>
 #include <linux/types.h>
 
 #include "include/aos-tag.h"
 #include "include/aos-tag_dev-driver.h"
 #include "include/aos-tag_types.h"
+
+/* Magic number: expected maximum status file line length, given its content. */
+#define __STAT_LINE_SZ (54 + 1)  // Remember the null terminator.
 
 extern int tag_drv_major;
 
@@ -39,6 +43,14 @@ typedef struct _tag_stat_t {
     size_t stat_len;
     char *stat_data;
 } tag_stat_t;
+
+/* Instance status snapshot raw data buffer. */
+typedef struct _tag_snap_t {
+    unsigned char valid : 1;
+    int key;
+    kuid_t c_euid;
+    unsigned long readers_cnts[__NR_LEVELS];
+} tag_snap_t;
 
 /* AOS-TAG service character device driver. */
 struct file_operations tag_fops = {
@@ -85,11 +97,20 @@ int aos_tag_open(struct inode *inode, struct file *filp) {
  */
 ssize_t aos_tag_read(struct file *filp, char *buf, size_t size, loff_t *off) {
     ssize_t copied;
+    tag_stat_t *stat;
+    char *file_buf;
+    size_t file_sz;
     // Consistency checks.
     if ((filp == NULL) || (buf == NULL) || (off == NULL) || (*off < 0) ||
         (size == 0))
         return -EINVAL;
-    // TODO check EOF: must return 0.
+    file_buf = stat->stat_data;
+    file_sz = stat->stat_len;
+    // Check for EOF condition.
+    if (*off >= file_sz) return 0;
+    // TODO
+    // Update file offset and we're done.
+    *off += copied;
     return copied;
 }
 
