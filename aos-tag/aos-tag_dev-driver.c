@@ -26,12 +26,19 @@
 #include <linux/fs.h>
 #include <linux/cdev.h>
 #include <linux/vmalloc.h>
+#include <linux/types.h>
 
 #include "include/aos-tag.h"
 #include "include/aos-tag_dev-driver.h"
 #include "include/aos-tag_types.h"
 
 extern int tag_drv_major;
+
+/* Status device file size and data. */
+typedef struct _tag_stat_t {
+    size_t stat_len;
+    char *stat_data;
+} tag_stat_t;
 
 /* AOS-TAG service character device driver. */
 struct file_operations tag_fops = {
@@ -77,7 +84,13 @@ int aos_tag_open(struct inode *inode, struct file *filp) {
  * @return Number of bytes read, or error code for errno.
  */
 ssize_t aos_tag_read(struct file *filp, char *buf, size_t size, loff_t *off) {
-    return 0;
+    ssize_t copied;
+    // Consistency checks.
+    if ((filp == NULL) || (buf == NULL) || (off == NULL) || (*off < 0) ||
+        (size == 0))
+        return -EINVAL;
+    // TODO check EOF: must return 0.
+    return copied;
 }
 
 /**
@@ -114,7 +127,12 @@ long aos_tag_ioctl(struct file *filp, unsigned int cmd, unsigned long param) {
  * @return 0, or error code for errno.
  */
 int aos_tag_release(struct inode *inode, struct file *filp) {
-    vfree(filp->private_data);
+    tag_stat_t *stat;
+    if (filp == NULL) return -EINVAL;
+    stat = (tag_stat_t *)(filp->private_data);
     filp->private_data = NULL;
+    stat->stat_len = 0;
+    vfree(stat->stat_data);
+    vfree(stat);
     return 0;
 }
