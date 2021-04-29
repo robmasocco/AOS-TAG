@@ -27,6 +27,7 @@
 #include <linux/slab.h>
 #include <linux/syscalls.h>
 #include <linux/fs.h>
+#include <linux/cdev.h>
 #include <linux/rwsem.h>
 #include <linux/errno.h>
 #include <linux/version.h>
@@ -129,6 +130,10 @@ __SYSCALL_DEFINEx(2, _tag_ctl, int, tag, int, cmd) {
 }
 
 extern struct file_operations tag_fops;
+extern struct cdev tag_cdev;
+extern struct device *tag_dev;
+extern dev_t tag_status_dvn;
+extern struct class *tag_status_cls;
 
 /* Required module's reference. */
 struct module *scth_mod;
@@ -152,6 +157,7 @@ tag_bitmask *tags_mask = NULL;
  */
 int init_module(void) {
     unsigned int i;
+    int ret;
     // Consistency check on module parameters.
     if (max_tags < __MAX_TAGS_DFL) max_tags = __MAX_TAGS_DFL;
     if (max_msg_sz < __MAX_MSG_SZ_DFL) max_msg_sz = __MAX_MSG_SZ_DFL;
@@ -193,7 +199,56 @@ int init_module(void) {
         init_rwsem(&(tags_list[i].rcv_rwsem));
         init_rwsem(&(tags_list[i].snd_rwsem));
     }
-    // TODO Device driver stuff.
+    // Initialize and register device driver.
+    cdev_init(&tag_cdev, &tag_fops);
+    tag_drv_major = __register_chrdev(0, 0, 1, DRVNAME, &tag_fops);
+    if (tag_drv_major < 0) {
+        printk(KERN_ERR "%s: Failed to register char device.\n", MODNAME);
+        module_put(scth_mod);
+        delete_splay_int_tree(shared_bst);
+        TAG_MASK_FREE(tags_mask);
+        kfree(tags_list);
+        return tag_drv_major;
+    }
+    // Must create kobjects in /sys/class before doing stuff in /dev.
+    tag_status_cls = class_create(THIS_MODULE, STATUS_DEVFILE);
+    if (IS_ERR(tag_status_cls)) {
+        printk(KERN_ERR "%s: Failed to create status device class.\n", MODNAME);
+        __unregister_chrdev(tag_drv_major, 0, 1, DRVNAME);
+        module_put(scth_mod);
+        delete_splay_int_tree(shared_bst);
+        TAG_MASK_FREE(tags_mask);
+        kfree(tags_list);
+        return -EPERM;
+    }
+    // Create device file in /dev.
+    tag_status_dvn = MKDEV(tag_drv_major, 0);
+    tag_dev = device_create(tag_status_cls, NULL, tag_status_dvn,
+                            NULL, STATUS_DEVFILE);
+    if (IS_ERR(tag_dev)) {
+        printk(KERN_ERR "%s: Failed to create device file %s.\n",
+               MODNAME, STATUS_DEVFILE);
+        class_destroy(tag_status_cls);
+        __unregister_chrdev(tag_drv_major, 0, 1, DRVNAME);
+        module_put(scth_mod);
+        delete_splay_int_tree(shared_bst);
+        TAG_MASK_FREE(tags_mask);
+        kfree(tags_list);
+        return -EPERM;
+    }
+    // Device goes live.
+    ret = cdev_add(&tag_cdev, tag_status_dvn, 1);
+    if (ret < 0) {
+        printk(KERN_ERR "%s: Failed to add char device.\n", MODNAME);
+        device_destroy(tag_status_cls, tag_status_dvn);
+        class_destroy(tag_status_cls);
+        __unregister_chrdev(tag_drv_major, 0, 1, DRVNAME);
+        module_put(scth_mod);
+        delete_splay_int_tree(shared_bst);
+        TAG_MASK_FREE(tags_mask);
+        kfree(tags_list);
+        return ret;
+    }
     // Install the new system calls.
     tag_get_nr = scth_hack(__x64_sys_tag_get);
     tag_receive_nr = scth_hack(__x64_sys_tag_rcv);
@@ -212,7 +267,10 @@ int init_module(void) {
         delete_splay_int_tree(shared_bst);
         TAG_MASK_FREE(tags_mask);
         kfree(tags_list);
-        // TODO Device driver stuff.
+        cdev_del(&tag_cdev);
+        device_destroy(tag_status_cls, tag_status_dvn);
+        class_destroy(tag_status_cls);
+        __unregister_chrdev(tag_drv_major, 0, 1, DRVNAME);
         return -EPERM;
     }
     printk(KERN_INFO "%s: Initialization completed.\n", MODNAME);
@@ -238,7 +296,10 @@ void cleanup_module(void) {
     scth_unhack(tag_send_nr);
     scth_unhack(tag_ctl_nr);
     module_put(scth_mod);
-    // TODO Device driver stuff.
+    cdev_del(&tag_cdev);
+    device_destroy(tag_status_cls, tag_status_dvn);
+    class_destroy(tag_status_cls);
+    __unregister_chrdev(tag_drv_major, 0, 1, DRVNAME);
     // Scan the tags list, releasing leftovers.
     for (; i < max_tags; i++) {
         tag_t *curr_tag;

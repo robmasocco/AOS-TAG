@@ -24,6 +24,7 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/fs.h>
+#include <linux/cdev.h>
 #include <linux/vmalloc.h>
 
 #include "include/aos-tag.h"
@@ -42,6 +43,16 @@ struct file_operations tag_fops = {
     .release = aos_tag_release
 };
 
+/* Character device structure. */
+struct cdev tag_cdev;
+
+/* Device structure and number. */
+struct device *tag_dev;
+dev_t tag_status_dvn;
+
+/* Device class in sysfs. */
+struct class *tag_status_cls;
+
 /**
  * @brief Opens a new session for the device file. 
  * Takes a snapshot of the status of the system by scanning the instances array. 
@@ -53,7 +64,7 @@ struct file_operations tag_fops = {
  * @return 0, or error code for errno.
  */
 int aos_tag_open(struct inode *inode, struct file *filp) {
-
+    return 0;
 }
 
 /**
@@ -66,7 +77,7 @@ int aos_tag_open(struct inode *inode, struct file *filp) {
  * @return Number of bytes read, or error code for errno.
  */
 ssize_t aos_tag_read(struct file *filp, char *buf, size_t size, loff_t *off) {
-
+    return 0;
 }
 
 /**
@@ -92,7 +103,7 @@ ssize_t aos_tag_write(struct file *filp, const char *buf, size_t size,
  * @return 0, or error code for errno.
  */
 long aos_tag_ioctl(struct file *filp, unsigned int cmd, unsigned long param) {
-    return -EPERM;
+    return -ENOSYS;
 }
 
 /**
@@ -103,5 +114,5 @@ long aos_tag_ioctl(struct file *filp, unsigned int cmd, unsigned long param) {
  * @return 0, or error code for errno.
  */
 int aos_tag_release(struct inode *inode, struct file *filp) {
-
+    return 0;
 }
