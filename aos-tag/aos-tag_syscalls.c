@@ -149,10 +149,9 @@ int aos_tag_get(int key, int cmd, int perm) {
             init_waitqueue_head(&((new_srv->lvl_queues)[i][1]));
             TAG_COND_INIT(&((new_srv->lvl_conds)[i]));
         }
-        if (perm == __TAG_USR) {
-            new_srv->perm_check = 0x1;
-            new_srv->creator_euid.val = current_euid().val;
-        }
+        new_srv->creator_euid.val = current_euid().val;
+        if (perm == __TAG_USR) new_srv->perm_check = 0x1;
+        else new_srv->perm_check = 0x0;
         mutex_init(&(new_srv->awake_all_lock));
         TAG_COND_INIT(&(new_srv->globl_cond));
         // Add the new instance struct pointer to the static list.
