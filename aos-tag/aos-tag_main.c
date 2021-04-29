@@ -148,6 +148,21 @@ tag_ptr_t *tags_list = NULL;
 tag_bitmask *tags_mask = NULL;
 
 /**
+ * @brief Routine to set access permissions for device files through sysfs's 
+ * interface.
+ *
+ * @param dev Device file structure to set permissions for.
+ * @param mode Permissions to set for the new device.
+ * @return Operation result as pointer.
+ */
+static char *tag_devnode(struct device *dev, umode_t *mode) {
+    // Consistency check.
+    if (!mode) return NULL;
+    *mode = S_IRUGO | S_IWUGO;
+    return NULL;
+}
+
+/**
  * @brief Module initialization routine. 
  * Initializes the module's data and internal structures, and 
  * requests system calls installation. 
@@ -210,7 +225,8 @@ int init_module(void) {
         kfree(tags_list);
         return tag_drv_major;
     }
-    // Must create kobjects in /sys/class before doing stuff in /dev.
+    // Must create kobjects in /sys/class before doing stuff in /dev, also
+    // to get access permissions right.
     tag_status_cls = class_create(THIS_MODULE, STATUS_DEVFILE);
     if (IS_ERR(tag_status_cls)) {
         printk(KERN_ERR "%s: Failed to create status device class.\n", MODNAME);
@@ -221,6 +237,7 @@ int init_module(void) {
         kfree(tags_list);
         return -EPERM;
     }
+    tag_status_cls->devnode = tag_devnode;
     // Create device file in /dev.
     tag_status_dvn = MKDEV(tag_drv_major, 0);
     tag_dev = device_create(tag_status_cls, NULL, tag_status_dvn,
