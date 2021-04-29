@@ -29,10 +29,11 @@
 
 #define STATUS_DEVFILE "aos_tag_status"
 
-int aos_tag_open(struct inode *inode, struct file *file);
-int aos_tag_release(struct inode *inode, struct file *file);
-ssize_t aos_tag_read(struct file *file, char *buf, size_t size, loff_t *off);
-ssize_t aos_tag_write(struct file *file, const char *buf, size_t size,
+int aos_tag_open(struct inode *inode, struct file *filp);
+int aos_tag_release(struct inode *inode, struct file *filp);
+ssize_t aos_tag_read(struct file *filp, char *buf, size_t size, loff_t *off);
+ssize_t aos_tag_write(struct file *filp, const char *buf, size_t size,
                       loff_t *off);
+long aos_tag_ioctl(struct file *filp, unsigned int cmd, unsigned long param);
 
 #endif

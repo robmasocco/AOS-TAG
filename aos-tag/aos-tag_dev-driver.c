@@ -38,6 +38,7 @@ struct file_operations tag_fops = {
     .open = aos_tag_open,
     .read = aos_tag_read,
     .write = aos_tag_write,
+    .unlocked_ioctl = aos_tag_ioctl,
     .release = aos_tag_release
 };
 
@@ -51,7 +52,7 @@ struct file_operations tag_fops = {
  * @param file Device file struct.
  * @return 0, or error code for errno.
  */
-int aos_tag_open(struct inode *inode, struct file *file) {
+int aos_tag_open(struct inode *inode, struct file *filp) {
 
 }
 
@@ -64,7 +65,7 @@ int aos_tag_open(struct inode *inode, struct file *file) {
  * @param off Offset at which to start reading.
  * @return Number of bytes read, or error code for errno.
  */
-ssize_t aos_tag_read(struct file *file, char *buf, size_t size, loff_t *off) {
+ssize_t aos_tag_read(struct file *filp, char *buf, size_t size, loff_t *off) {
 
 }
 
@@ -77,8 +78,20 @@ ssize_t aos_tag_read(struct file *file, char *buf, size_t size, loff_t *off) {
  * @param off Offset to write to.
  * @return Number of bytes written, or error code for errno.
  */
-ssize_t aos_tag_write(struct file *file, const char *buf, size_t size,
+ssize_t aos_tag_write(struct file *filp, const char *buf, size_t size,
                       loff_t *off) {
+    return -EPERM;
+}
+
+/**
+ * @brief I/O control: a nop.
+ *
+ * @param file Device file struct.
+ * @param cmd Command to execute.
+ * @param param Parameter for the aforementioned command execution.
+ * @return 0, or error code for errno.
+ */
+long aos_tag_ioctl(struct file *filp, unsigned int cmd, unsigned long param) {
     return -EPERM;
 }
 
@@ -89,6 +102,6 @@ ssize_t aos_tag_write(struct file *file, const char *buf, size_t size,
  * @param file Device file struct.
  * @return 0, or error code for errno.
  */
-int aos_tag_release(struct inode *inode, struct file *file) {
+int aos_tag_release(struct inode *inode, struct file *filp) {
 
 }
