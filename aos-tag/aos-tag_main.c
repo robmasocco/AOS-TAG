@@ -290,12 +290,15 @@ int init_module(void) {
         __unregister_chrdev(tag_drv_major, 0, 1, DRVNAME);
         return -EPERM;
     }
-    printk(KERN_INFO "%s: Initialization completed.\n", MODNAME);
-    printk(KERN_INFO "%s: tag_get installed at %d.\n", MODNAME, tag_get_nr);
-    printk(KERN_INFO "%s: tag_receive installed at %d.\n", MODNAME,
-        tag_receive_nr);
-    printk(KERN_INFO "%s: tag_send installed at %d.\n", MODNAME, tag_send_nr);
-    printk(KERN_INFO "%s: tag_ctl installed at %d.\n", MODNAME, tag_ctl_nr);
+    printk(KERN_INFO "%s: Initialization completed successfully.\n", MODNAME);
+    printk(KERN_INFO "%s: tag_get installed at entry no. %d.\n",
+           MODNAME, tag_get_nr);
+    printk(KERN_INFO "%s: tag_receive installed at entry no. %d.\n",
+           MODNAME, tag_receive_nr);
+    printk(KERN_INFO "%s: tag_send installed at entry no. %d.\n",
+           MODNAME, tag_send_nr);
+    printk(KERN_INFO "%s: tag_ctl installed at entry no. %d.\n",
+           MODNAME, tag_ctl_nr);
     printk(KERN_INFO "%s: Device driver registered with major number: %d.\n",
            MODNAME, tag_drv_major);
     return 0;
