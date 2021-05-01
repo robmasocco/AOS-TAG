@@ -212,8 +212,8 @@ int aos_tag_rcv(int tag, int lvl, char *buf, size_t size) {
     printk(KERN_INFO "%s: tag_receive: Called with (%d, %d, 0x%px, %lu).\n",
         MODNAME, tag, lvl, buf, size);
     // Consistency check on input arguments.
-    if ((tag < 0) || (tag >= max_tags) || (buf == NULL) ||
-        (lvl < 0) || (lvl >= __NR_LEVELS)) return -EINVAL;
+    if ((tag < 0) || (tag >= max_tags) || (lvl < 0) || (lvl >= __NR_LEVELS))
+        return -EINVAL;
     // First, check if the instance exists and we're allowed to access it.
     if (down_read_killable(&(tags_list[tag].rcv_rwsem)) == -EINTR)
         return -EINTR;
@@ -266,8 +266,8 @@ int aos_tag_rcv(int tag, int lvl, char *buf, size_t size) {
         unsigned long not_copied = 0;
         // Remember that zero-length messages are allowed!
         // Must only check if the provided buffer is large enough.
-        if (size < tag_inst->mgs_sizes[lvl]) {
-            // Not enough.
+        if ((buf == NULL) || (size < tag_inst->mgs_sizes[lvl])) {
+            // Not enough space in the buffer.
             TAG_COND_UNREG(&((tag_inst->lvl_conds)[lvl]), lvl_epoch);
             up_read(&(tags_list[tag].rcv_rwsem));
             return -ENOBUFS;
