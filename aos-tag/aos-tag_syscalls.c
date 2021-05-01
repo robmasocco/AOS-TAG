@@ -260,7 +260,7 @@ int aos_tag_rcv(int tag, int lvl, char *buf, size_t size) {
         up_read(&(tags_list[tag].rcv_rwsem));
         // TODO Debug.
         printk(KERN_DEBUG "%s: tag_receive: Got hit by AWAKE_ALL.\n", MODNAME);
-        return -EINTR;
+        return -ECANCELED;
     }
     // If we got here means that there's a message. Let's get to it.
     TAG_COND_UNREG(&(tag_inst->globl_cond), globl_epoch);
