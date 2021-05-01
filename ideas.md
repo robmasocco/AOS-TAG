@@ -9,10 +9,11 @@
 - Permissions are implemented as simple checks of the current EUID against the creator's EUID when a thread calls a *send* or a *receive* on an active instance. Such EUID is stored upon creation of the instance and checked each time it is acted upon. As for any service like this, the *root user* (aka EUID 0) can do everything everywhere.
 - When loaded, this does a *try_module_get* on the *scth* module in the *init_module*, which is a dependency, releasing it with a *module_put* in *cleanup_module*.
 - Routines are embedded into functions, to simplify code-writing, system calls definitions and device drivers coding.
+- **IPC_PRIVATE instances must be removed by at least one thread of the process in which they were created, otherwise they won't be accessible anymore after such process has exited.** This is because we lack a system similar to the kernel's file descriptor table mass-close upon exit.
 
 ## BINARY SEARCH TREE
 
-- Represents key-instance associations.
+- Represents shared key-instance associations.
 - Is indexed by int keys.
 - Each entry is an int "tag descriptor", index in the array.
 - Must be optimized for speed, "cache-like", so a splay tree should fit right in.
@@ -353,7 +354,7 @@ Full instance wakeups work in a similar fashion, as is clear from the pseudocode
 
 - Load and unload scripts, that handle *insmod*, *rmmod* and possibly compilation accordingly.
 - Hide debug audits with preprocessor directives.
-- Try to remove memory fences and compiler barriers next to synchronization primitives operations.
+- Try to remove memory fences and compiler barriers next to synchronization primitives operations (in a branch).
 - Documentation.
 
 # EXTRAS
