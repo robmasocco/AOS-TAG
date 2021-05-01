@@ -26,8 +26,8 @@
  * @date February 1, 2021
  */
 
-#ifndef _X86_UTILS_H
-#define _X86_UTILS_H
+#ifndef X86_UTILS_H
+#define X86_UTILS_H
 
 #include <linux/irqflags.h>
 

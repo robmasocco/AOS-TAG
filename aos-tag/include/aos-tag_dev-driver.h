@@ -21,8 +21,8 @@
  * @date April 10, 2021
  */
 
-#ifndef _AOS_TAG_DEVDRIVER_H
-#define _AOS_TAG_DEVDRIVER_H
+#ifndef AOS_TAG_DEVDRIVER_H
+#define AOS_TAG_DEVDRIVER_H
 
 #include <linux/fs.h>
 #include <linux/types.h>

@@ -27,8 +27,8 @@
  * @date February 8, 2021
  */
 
-#ifndef _SCT_HACKER_H
-#define _SCT_HACKER_H
+#ifndef SCT_HACKER_H
+#define SCT_HACKER_H
 
 void **scth_finder(void);
 void scth_cleanup(void);

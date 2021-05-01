@@ -25,8 +25,8 @@
  * @date February 1, 2021
  */
 
-#ifndef _PAGING_NAVIGATOR_H
-#define _PAGING_NAVIGATOR_H
+#ifndef PAGING_NAVIGATOR_H
+#define PAGING_NAVIGATOR_H
 
 #define NOMAP -1
 

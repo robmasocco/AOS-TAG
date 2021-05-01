@@ -21,8 +21,8 @@
  * @date April 10, 2021
  */
 
-#ifndef _AOS_TAG_TYPES_H
-#define _AOS_TAG_TYPES_H
+#ifndef AOS_TAG_TYPES_H
+#define AOS_TAG_TYPES_H
 
 #include <linux/types.h>
 #include <linux/rwsem.h>

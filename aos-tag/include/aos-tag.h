@@ -21,8 +21,8 @@
  * @date April 25, 2021
  */
 
-#ifndef _AOS_TAG_DEFS_H
-#define _AOS_TAG_DEFS_H
+#ifndef AOS_TAG_H
+#define AOS_TAG_H
 
 #ifdef __KERNEL__
 /* KERNEL MODULE HEADER */

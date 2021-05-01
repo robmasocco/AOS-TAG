@@ -23,8 +23,8 @@
  * @date April 10, 2021
  */
 
-#ifndef _AOS_TAG_SYSCALLS_H
-#define _AOS_TAG_SYSCALLS_H
+#ifndef AOS_TAG_SYSCALLS_H
+#define AOS_TAG_SYSCALLS_H
 
 #include <linux/types.h>
 
