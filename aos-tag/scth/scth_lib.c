@@ -113,6 +113,7 @@ void scth_cleanup(void) {
     mutex_unlock(&scth_lock);
     printk(KERN_INFO "%s: System call table restored.\n", MODNAME);
 }
+EXPORT_SYMBOL(scth_cleanup);
 
 /**
  * @brief Replaces a free entry in the table with a pointer to some other 
@@ -147,6 +148,7 @@ int scth_hack(void *new_call_addr) {
     mutex_unlock(&scth_lock);
     return -1;
 }
+EXPORT_SYMBOL(scth_hack);
 
 /**
  * @brief Restores an entry in the table.
@@ -178,6 +180,7 @@ void scth_unhack(int to_restore) {
     }
     mutex_unlock(&scth_lock);
 }
+EXPORT_SYMBOL(scth_unhack);
 
 /**
  * @brief Scans the system call table and determines which entries can be 
@@ -299,9 +302,4 @@ void **scth_finder(void) {
     printk(KERN_ERR "%s: UNISTD_64 system call table not found.\n", MODNAME);
     return NULL;
 }
-
-/* Symbols this library makes available to other modules. */
 EXPORT_SYMBOL(scth_finder);
-EXPORT_SYMBOL(scth_cleanup);
-EXPORT_SYMBOL(scth_hack);
-EXPORT_SYMBOL(scth_unhack);
