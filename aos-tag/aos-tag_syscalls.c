@@ -189,6 +189,8 @@ int aos_tag_get(int key, int cmd, int perm) {
         printk(KERN_DEBUG "%s: tag_get: New tag: %d.\n", MODNAME, tag);
         return tag;
     }
+    // If we get here, it means that we've been asked to reopen an IPC_PRIVATE
+    // instance, which is an invalid operation.
     return -EINVAL;
 }
 
