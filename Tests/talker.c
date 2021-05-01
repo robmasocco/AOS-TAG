@@ -62,6 +62,13 @@ int main(int argc, char **argv) {
         msg_cnt++;
         if (usleep(period * 1000)) break;
     }
+    usleep(100 * 1000);
+    // Awake all readers so that we can remove the instance.
+    if (tag_ctl(tag, AWAKE_ALL)) {
+        fprintf(stderr, "ERROR: AWAKE_ALL failed.\n");
+        perror("tag_ctl");
+        exit(EXIT_FAILURE);
+    }
     // Try to remove the instance.
     // If listeners are still active, this should fail.
     if (tag_ctl(tag, REMOVE)) {

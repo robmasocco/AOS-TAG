@@ -50,11 +50,15 @@ int main(int argc, char **argv) {
     for (;;) {
         memset(msg_buf, 0, BUFSIZE);
         if (tag_receive(tag, lvl, msg_buf, BUFSIZE)) {
-            if (errno != EINTR) {
+            if (errno == EINTR) break;
+            else if (errno == ECANCELED) {
+                printf("Got hit by AWAKE_ALL!\n");
+                break;
+            } else {
                 fprintf(stderr, "ERROR: Failed to receive message.\n");
                 perror("tag_receive");
                 exit(EXIT_FAILURE);
-            } else break;
+            }
         }
         printf("%s\n", msg_buf);
     }
