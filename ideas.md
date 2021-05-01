@@ -353,7 +353,6 @@ Full instance wakeups work in a similar fashion, as is clear from the pseudocode
 # TODO LIST
 
 - Load and unload scripts, that handle *insmod*, *rmmod* and possibly compilation accordingly.
-- Hide debug audits with preprocessor directives.
 - Try to remove memory fences and compiler barriers next to synchronization primitives operations (in a branch).
 - Documentation.
 

@@ -74,9 +74,10 @@ int aos_tag_get(int key, int cmd, int perm) {
     tag_t *new_srv;
     unsigned int i;
     unsigned long ins_res;
-    // TODO Debug.
+    #ifdef DEBUG
     printk(KERN_DEBUG "%s: tag_get: Called with (%d, %d, %d).\n",
         MODNAME, key, cmd, perm);
+    #endif
     // Consistency check on input arguments.
     if ((cmd != __TAG_OPEN) && (cmd != __TAG_CREATE)) return -EINVAL;
     if ((perm != __TAG_ALL) && (perm != __TAG_USR)) return -EINVAL;
@@ -93,8 +94,9 @@ int aos_tag_get(int key, int cmd, int perm) {
         tag = search_res->_data;
         asm volatile ("lfence" ::: "memory");
         up_read(&shared_bst_lock);
-        // TODO Debug.
+        #ifdef DEBUG
         printk(KERN_DEBUG "%s: tag_get: Requested key: %d.\n", MODNAME, tag);
+        #endif
         return tag;
     }
     if (cmd == __TAG_CREATE) {
@@ -138,9 +140,10 @@ int aos_tag_get(int key, int cmd, int perm) {
                                 "(%d, %d).\n", MODNAME, key, tag);
                 return -ENOMEM;
             }
-            // TODO Debug.
+            #ifdef DEBUG
             printk(KERN_DEBUG "%s: tag_get: Insert returned: %lu.\n",
                 MODNAME, ins_res);
+            #endif
         }
         new_srv->key = key;
         for (i = 0; i < __NR_LEVELS; i++) {
@@ -185,8 +188,9 @@ int aos_tag_get(int key, int cmd, int perm) {
         if (key != __TAG_IPC_PRIVATE)
             // Now that all is in place we make the addition visible to all.
             up_write(&shared_bst_lock);
-        // TODO Debug.
+        #ifdef DEBUG
         printk(KERN_DEBUG "%s: tag_get: New tag: %d.\n", MODNAME, tag);
+        #endif
         return tag;
     }
     // If we get here, it means that we've been asked to reopen an IPC_PRIVATE
@@ -210,9 +214,10 @@ int aos_tag_rcv(int tag, int lvl, char *buf, size_t size) {
     tag_t *tag_inst;
     unsigned char lvl_epoch, globl_epoch;
     int wait_res = 0;
-    // TODO Debug.
+    #ifdef DEBUG
     printk(KERN_INFO "%s: tag_receive: Called with (%d, %d, 0x%px, %lu).\n",
         MODNAME, tag, lvl, buf, size);
+    #endif
     // Consistency check on input arguments.
     if ((tag < 0) || (tag >= max_tags) || (lvl < 0) || (lvl >= __NR_LEVELS))
         return -EINVAL;
@@ -235,9 +240,10 @@ int aos_tag_rcv(int tag, int lvl, char *buf, size_t size) {
     // Now let's register for the current local and global wait conditions.
     lvl_epoch = TAG_COND_REG(&((tag_inst->lvl_conds)[lvl]));
     globl_epoch = TAG_COND_REG(&(tag_inst->globl_cond));
-    // TODO Debug.
+    #ifdef DEBUG
     printk(KERN_DEBUG "%s: tag_receive: Local epoch: %d, global epoch: %d.\n",
            MODNAME, lvl_epoch, globl_epoch);
+    #endif
     // Now we can wait on our level's wait queue, keeping an eye out for both
     // the local and the global conditions, of the respective epochs.
     wait_res =
@@ -258,8 +264,9 @@ int aos_tag_rcv(int tag, int lvl, char *buf, size_t size) {
         TAG_COND_UNREG(&((tag_inst->lvl_conds)[lvl]), lvl_epoch);
         TAG_COND_UNREG(&(tag_inst->globl_cond), globl_epoch);
         up_read(&(tags_list[tag].rcv_rwsem));
-        // TODO Debug.
+        #ifdef DEBUG
         printk(KERN_DEBUG "%s: tag_receive: Got hit by AWAKE_ALL.\n", MODNAME);
+        #endif
         return -ECANCELED;
     }
     // If we got here means that there's a message. Let's get to it.
@@ -287,9 +294,10 @@ int aos_tag_rcv(int tag, int lvl, char *buf, size_t size) {
     }
     TAG_COND_UNREG(&((tag_inst->lvl_conds)[lvl]), lvl_epoch);
     up_read(&(tags_list[tag].rcv_rwsem));
-    // TODO Debug.
+    #ifdef DEBUG
     printk(KERN_DEBUG "%s: tag_receive: Got message from tag: %d, on level "
            "%d.\n", MODNAME, tag, lvl);
+    #endif
     return 0;
 }
 
@@ -313,9 +321,10 @@ int aos_tag_snd(int tag, int lvl, char *buf, size_t size) {
     tag_t *tag_inst;
     char *new_msg;
     unsigned char lvl_epoch;
-    // TODO Debug.
+    #ifdef DEBUG
     printk(KERN_INFO "%s: tag_send: Called with (%d, %d, 0x%px, %lu).\n",
         MODNAME, tag, lvl, buf, size);
+    #endif
     // Consistency checks on input arguments.
     if ((tag < 0) || (tag >= max_tags) || ((size != 0) && (buf == NULL)) ||
         (lvl < 0) || (lvl >= __NR_LEVELS)) return -EINVAL;
@@ -366,9 +375,10 @@ int aos_tag_snd(int tag, int lvl, char *buf, size_t size) {
         mutex_unlock(&((tag_inst->snd_locks)[lvl]));
         up_read(&(tags_list[tag].snd_rwsem));
         if (size != 0) kfree(new_msg);
-        // TODO Debug.
+        #ifdef DEBUG
         printk(KERN_DEBUG "%s: tag_send: Discarded message on tag: %d, "
                           "level: %d.\n", MODNAME, tag, lvl);
+        #endif
         return 0;
     }
     // Now we actually have someone to deliver to.
@@ -395,9 +405,10 @@ int aos_tag_snd(int tag, int lvl, char *buf, size_t size) {
     mutex_unlock(&((tag_inst->snd_locks)[lvl]));
     up_read(&(tags_list[tag].snd_rwsem));
     if (size != 0) kfree(new_msg);
-    // TODO Debug.
+    #ifdef DEBUG
     printk(KERN_DEBUG "%s: tag_send: Delivered %lu byte(s) message on tag: %d,"
                       " level: %d.\n", MODNAME, size, tag, lvl);
+    #endif
     return 0;
 }
 
@@ -414,9 +425,10 @@ int aos_tag_snd(int tag, int lvl, char *buf, size_t size) {
  */
 int aos_tag_ctl(int tag, int cmd) {
     tag_t *tag_inst;
-    // TODO Debug.
+    #ifdef DEBUG
     printk(KERN_DEBUG "%s: tag_ctl: Called with (%d, %d).\n",
            MODNAME, tag, cmd);
+    #endif
     // Consistency check on input arguments.
     if ((tag < 0) || (tag >= max_tags) ||
         ((cmd != __TAG_REMOVE) && (cmd != __TAG_AWAKE_ALL)))
@@ -469,9 +481,10 @@ int aos_tag_ctl(int tag, int cmd) {
         // All done!
         mutex_unlock(&(tag_inst->awake_all_lock));
         up_read(&(tags_list[tag].snd_rwsem));
-        // TODO Debug.
+        #ifdef DEBUG
         printk(KERN_DEBUG "%s: tag_ctl: Awoken all receivers on tag: %d.\n",
                MODNAME, tag);
+        #endif
     }
     if (cmd == __TAG_REMOVE) {
         // We have been asked to remove an instance.
@@ -507,17 +520,19 @@ int aos_tag_ctl(int tag, int cmd) {
             if (!splay_int_delete(shared_bst, tag_inst->key))
                 printk(KERN_ERR "%s: tag_ctl: Couldn't remove key %d, with tag"
                        " %d.\n", MODNAME, tag_inst->key, tag);
-            // TODO Debug.
+            #ifdef DEBUG
             else
                 printk(KERN_DEBUG "%s: tag_ctl: Deleted key: %d from BST.\n",
                    MODNAME, tag_inst->key);
+            #endif
             up_write(&shared_bst_lock);
         }
         TAG_CLR(tags_mask, tag);
         tag_inst->creator_euid.val = 0;  // For security.
         kfree(tag_inst);  // Done!
-        // TODO Debug.
+        #ifdef DEBUG
         printk(KERN_DEBUG "%s: tag_ctl: Removed tag: %d.\n", MODNAME, tag);
+        #endif
     }
     return 0;
 }
