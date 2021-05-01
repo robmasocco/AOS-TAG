@@ -13,21 +13,25 @@
 
 #include "../aos-tag/include/aos-tag.h"
 
+#define TEST_KEY 1024
+
 int main(void) {
-    int ret;
-    ret = tag_get(1024, 1, 1);
+    int ret, tag;
+    ret = tag_get(TEST_KEY, TAG_CREATE, TAG_USR);
     printf("tag_get: %d.\n", ret);
     perror("tag_get");
-    ret = tag_get(1024, 0, 1);
+    tag = ret;
+    ret = tag_get(TEST_KEY, TAG_OPEN, 1);
     printf("tag_get: %d.\n", ret);
     perror("tag_get");
-    ret = tag_receive(200, 12, NULL, 4096);
+    printf("Now press CTRL-C to proceed!\n");
+    ret = tag_receive(TEST_KEY, 12, NULL, 0);
     printf("tag_receive: %d.\n", ret);
     perror("tag_receive");
-    ret = tag_send(2345, 34, NULL, 5000);
+    ret = tag_send(TEST_KEY, 34, NULL, 0);
     printf("tag_send: %d.\n", ret);
     perror("tag_send");
-    ret = tag_ctl(34566, 0);
+    ret = tag_ctl(tag, REMOVE);
     printf("tag_ctl: %d.\n", ret);
     perror("tag_ctl");
     exit(EXIT_SUCCESS);
