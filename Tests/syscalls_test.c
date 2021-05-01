@@ -25,10 +25,10 @@ int main(void) {
     printf("tag_get: %d.\n", ret);
     perror("tag_get");
     printf("Now press CTRL-C to proceed!\n");
-    ret = tag_receive(TEST_KEY, 12, NULL, 0);
+    ret = tag_receive(tag, 12, NULL, 0);
     printf("tag_receive: %d.\n", ret);
     perror("tag_receive");
-    ret = tag_send(TEST_KEY, 34, NULL, 0);
+    ret = tag_send(tag, 34, NULL, 0);
     printf("tag_send: %d.\n", ret);
     perror("tag_send");
     ret = tag_ctl(tag, REMOVE);
