@@ -16,7 +16,7 @@
 /**
  * @brief Main source code file for the AOS-TAG module.
  *
- * @author Roberto Masocco
+ * @author Roberto Masocco <robmasocco@gmail.com>
  *
  * @date April 10, 2021
  */

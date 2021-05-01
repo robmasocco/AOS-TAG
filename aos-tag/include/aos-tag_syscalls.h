@@ -18,7 +18,7 @@
  *        Signatures and values in here follow the same layout in
  *        corresponding userspace headers.
  *
- * @author Roberto Masocco
+ * @author Roberto Masocco <robmasocco@gmail.com>
  *
  * @date April 10, 2021
  */

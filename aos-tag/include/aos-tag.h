@@ -16,7 +16,7 @@
 /**
  * @brief Definition of common macros, data and user stubs for this module.
  *
- * @author Roberto Masocco
+ * @author Roberto Masocco <robmasocco@gmail.com>
  *
  * @date April 25, 2021
  */

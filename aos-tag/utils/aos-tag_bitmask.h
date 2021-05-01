@@ -16,7 +16,7 @@
 /**
  * @brief Set of macros to interact with the instance bitmask.
  *
- * @author Roberto Masocco
+ * @author Roberto Masocco <robmasocco@gmail.com>
  *
  * @date April 3, 2021
  */

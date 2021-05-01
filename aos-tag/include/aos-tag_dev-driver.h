@@ -16,7 +16,7 @@
 /**
  * @brief Declarations of functions and structures of the module's dev driver.
  *
- * @author Roberto Masocco
+ * @author Roberto Masocco <robmasocco@gmail.com>
  *
  * @date April 10, 2021
  */

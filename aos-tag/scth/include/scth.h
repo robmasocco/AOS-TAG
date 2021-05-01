@@ -22,7 +22,7 @@
  *        parameters that you can find in the related source file. Some of them
  *        may be specified at boot to reconfigure the table search.
  *
- * @author Roberto Masocco
+ * @author Roberto Masocco <robmasocco@gmail.com>
  *
  * @date February 8, 2021
  */

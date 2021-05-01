@@ -17,7 +17,7 @@
  * @brief Source file for the "System Call Table Hacker" library.
  *        See related header file.
  *
- * @author Roberto Masocco
+ * @author Roberto Masocco <robmasocco@gmail.com>
  *
  * @date February 8, 2021
  */

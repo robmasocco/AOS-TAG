@@ -21,7 +21,7 @@
  *        static symbols to avoid compiler complaints about multiple
  *        definitions.
  * 
- * @author Roberto Masocco
+ * @author Roberto Masocco <robmasocco@gmail.com>
  * 
  * @date February 1, 2021
  */

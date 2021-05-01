@@ -16,7 +16,7 @@
 /**
  * @brief Definitions of the "condition" data type and related macros.
  *
- * @author Roberto Masocco
+ * @author Roberto Masocco <robmasocco@gmail.com>
  *
  * @date April 10, 2021
  */

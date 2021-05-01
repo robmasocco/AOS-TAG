@@ -16,7 +16,7 @@
 /**
  * @brief Definitions of data types required by this module.
  *
- * @author Roberto Masocco
+ * @author Roberto Masocco <robmasocco@gmail.com>
  *
  * @date April 10, 2021
  */

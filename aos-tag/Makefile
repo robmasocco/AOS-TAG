@@ -1,4 +1,4 @@
-# Roberto Masocco
+# Roberto Masocco <robmasocco@gmail.com>
 # 10/4/2021
 # Makefile for the "AOS-TAG" kernel module.
 # This module depends on the "SCTH" module.

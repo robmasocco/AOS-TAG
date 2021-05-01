@@ -20,7 +20,7 @@
  *        Works on x86-64 machines in long mode with 4-level paging.
  *        Rewritten along the lines of "VTPMO" while studying paging.
  * 
- * @author Roberto Masocco
+ * @author Roberto Masocco <robmasocco@gmail.com>
  * 
  * @date February 1, 2021
  */

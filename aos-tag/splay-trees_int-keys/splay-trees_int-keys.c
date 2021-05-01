@@ -16,7 +16,7 @@
 /**
  * @brief Splay Tree data structure library source code.
  *
- * @author Roberto Masocco
+ * @author Roberto Masocco <robmasocco@gmail.com>
  *
  * @date April 4, 2021
  */

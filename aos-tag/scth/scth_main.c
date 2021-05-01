@@ -17,7 +17,7 @@
  * @brief Main source file for the "System Call Table Hacker" kernel module.
  *        See other source files for more information.
  *
- * @author Roberto Masocco
+ * @author Roberto Masocco <robmasocco@gmail.com>
  *
  * @date March 8, 2021
  */

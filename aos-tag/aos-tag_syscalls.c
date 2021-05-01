@@ -16,7 +16,7 @@
 /**
  * @brief Source code file for the module's system calls.
  *
- * @author Roberto Masocco
+ * @author Roberto Masocco <robmasocco@gmail.com>
  *
  * @date April 10, 2021
  */
