@@ -287,7 +287,7 @@ Suggested programs for this are:
 - *less -f*
 
 Each line of the status device file describes a level of an active instance, with the following format:
-**KEY    CREATOR EUID    LEVEL    WAITING THREADS**
+**TAG    KEY    CREATOR EUID    LEVEL    WAITING THREADS**
 Only active, i.e. opened by at least one thread, instances are described in this file.
 
 ## OPEN

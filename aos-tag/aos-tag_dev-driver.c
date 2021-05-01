@@ -39,7 +39,7 @@
 #include "include/aos-tag_types.h"
 
 /* Magic number: expected maximum status file line length, given its content. */
-#define __STAT_LINE_LEN 54
+#define __STAT_LINE_LEN 64
 
 /* As LEN, but considering the null terminator. */
 #define __STAT_LINE_SZ (__STAT_LINE_LEN + 1)
@@ -168,7 +168,8 @@ int aos_tag_open(struct inode *inode, struct file *filp) {
             for (lvl = 0; lvl < __NR_LEVELS; lvl++) {
                 memset(new_line, 0, __STAT_LINE_SZ);
                 chars = scnprintf(new_line, __STAT_LINE_SZ,
-                                  "%d\t%u\t%u\t%lu\n",
+                                  "%u\t%d\t%u\t%u\t%lu\n",
+                                  tag,
                                   snaps[tag].key,
                                   snaps[tag].c_euid.val,
                                   lvl,
@@ -190,7 +191,7 @@ int aos_tag_open(struct inode *inode, struct file *filp) {
     // Set session data and we're done.
     kfree(snaps);
     filp->private_data = (void *)new_stat;
-    asm volatile ("sfence");
+    asm volatile ("sfence" ::: "memory");
     return 0;
 }
 
