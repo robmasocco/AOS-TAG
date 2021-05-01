@@ -10,13 +10,19 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <signal.h>
 
 #include "../aos-tag/include/aos-tag.h"
 
 #define TEST_KEY 1024
 
+void sighandler(int sig) {
+    printf("Got signal: %d.\n", sig);
+}
+
 int main(void) {
     int ret, tag;
+    signal(SIGINT, sighandler);
     ret = tag_get(TEST_KEY, TAG_CREATE, TAG_USR);
     printf("tag_get: %d.\n", ret);
     perror("tag_get");
@@ -28,7 +34,7 @@ int main(void) {
     ret = tag_receive(tag, 12, NULL, 0);
     printf("tag_receive: %d.\n", ret);
     perror("tag_receive");
-    ret = tag_send(tag, 34, NULL, 0);
+    ret = tag_send(tag, 0, NULL, 0);
     printf("tag_send: %d.\n", ret);
     perror("tag_send");
     ret = tag_ctl(tag, REMOVE);
