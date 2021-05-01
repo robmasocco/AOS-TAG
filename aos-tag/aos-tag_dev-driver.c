@@ -115,7 +115,6 @@ int aos_tag_open(struct inode *inode, struct file *filp) {
     for (tag = 0; tag < max_tags; tag++) {
         tag_t *curr_tag;
         unsigned int lvl;
-        unsigned char curr_epoch;
         if (down_read_trylock(&(tags_list[tag].snd_rwsem)) == 0) {
             // Instance is being created or removed AKA busy: we are too late.
             snaps[tag].valid = 0x0;
@@ -133,11 +132,14 @@ int aos_tag_open(struct inode *inode, struct file *filp) {
         valid_cnt++;
         snaps[tag].key = curr_tag->key;
         snaps[tag].c_euid.val = curr_tag->creator_euid.val;
-        for (lvl = 0; lvl < __NR_LEVELS; lvl++) {
-            curr_epoch = (curr_tag->lvl_conds)[lvl]._cond_epoch;
+        for (lvl = 0; lvl < __NR_LEVELS; lvl++)
+            // By adding the two presence counters we get the total number
+            // of waiting threads: those that are still copying a message
+            // and those that were too late for the last one, which are all
+            // threads currently waiting for a message on this level.
             snaps[tag].readers_cnts[lvl] =
-                (curr_tag->lvl_conds)[lvl]._pres_count[curr_epoch];
-        }
+                (curr_tag->lvl_conds)[lvl]._pres_count[0] +
+                (curr_tag->lvl_conds)[lvl]._pres_count[1];
         asm volatile ("sfence" ::: "memory");
         up_read(&(tags_list[tag].snd_rwsem));
     }
