@@ -282,7 +282,7 @@ int aos_tag_rcv(int tag, int lvl, char *buf, size_t size) {
             // retry, so the operation is aborted.
             TAG_COND_UNREG(&((tag_inst->lvl_conds)[lvl]), lvl_epoch);
             up_read(&(tags_list[tag].rcv_rwsem));
-            return -ECANCELED;
+            return -EFAULT;
         }
     }
     TAG_COND_UNREG(&((tag_inst->lvl_conds)[lvl]), lvl_epoch);
@@ -350,7 +350,7 @@ int aos_tag_snd(int tag, int lvl, char *buf, size_t size) {
             // retry, so the operation is aborted.
             up_read(&(tags_list[tag].snd_rwsem));
             kfree(new_msg);
-            return -ECANCELED;
+            return -EFAULT;
         }
     }
     // Acquire the right to send a message, and mark the start of the delivery.
