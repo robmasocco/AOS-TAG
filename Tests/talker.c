@@ -42,7 +42,12 @@ int main(int argc, char **argv) {
     if (tag == -1) {
         fprintf(stderr, "ERROR: Failed to create new tag service instance.\n");
         perror("tag_get");
-        exit(EXIT_FAILURE);
+        tag = tag_get(key, TAG_OPEN, TAG_USR);
+        if (tag == -1) {
+            fprintf(stderr, "ERROR: Failed to reopen instance.\n");
+            perror("tag_get");
+            exit(EXIT_FAILURE);
+        }
     }
     printf("Opened new instance with tag: %d.\n", tag);
     // Start posting messages.
