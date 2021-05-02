@@ -1,5 +1,5 @@
 # Roberto Masocco <robmasocco@gmail.com>
-# 2/5/2021
+# May 2, 2021
 # Makefile for the "AOS-TAG" kernel module testers.
 
 .PHONY: all

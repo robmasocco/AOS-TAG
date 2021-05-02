@@ -1,5 +1,5 @@
 # Roberto Masocco <robmasocco@gmail.com>
-# 8/3/2021
+# March 8, 2021
 # Makefile for the "System Call Table Hacker" kernel module.
 # NOTE: To activate debugging in this module, set DEBUG=1 from the command line.
 
