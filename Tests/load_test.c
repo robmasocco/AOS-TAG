@@ -109,7 +109,7 @@ int main(int argc, char **argv) {
     // Allocate test metadata and resources.
     pthread_t readers_tids[NR_READERS];
     pthread_t writers_tids[NR_WRITERS];
-    pthread_t single_reader, single_writer;
+    pthread_t single_writer;
     pthread_attr_t readers_attr[NR_READERS];
     pthread_attr_t writers_attr[NR_WRITERS];
     pthread_attr_t single_wr_attr;
