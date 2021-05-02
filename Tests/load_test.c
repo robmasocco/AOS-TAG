@@ -37,7 +37,7 @@ sem_t multi_writers_sem;
 int tag;
 
 FILE *out_file;
-char *out_file_name = "load_test.txt";
+char *out_file_name = "load_tests.txt";
 
 int cpus;
 
@@ -117,7 +117,7 @@ int main(int argc, char **argv) {
     clock_t tic, toc;
     double test_times[2];
     if (argc == 4) out_file = fopen(argv[3], "w+");
-    else out_file = fopen("load_tests.txt", "w+");
+    else out_file = fopen(out_file_name, "w+");
     if (out_file == NULL) {
         fprintf(stderr, "ERROR: Failed to open output file.\n");
         perror("fopen");
