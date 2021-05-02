@@ -1,0 +1,12 @@
+### AOS-TAG SEND/RECEIVE LOAD TESTS RESULTS ###
+[LOAD TEST 1 COMPLETED]
+Multiple readers, single writer test completed without errors.
+Number of readers: 8000.
+Number of writers: 1.
+Elapsed time: 0.402178 second(s).
+
+[LOAD TEST 2 COMPLETED]
+Multiple writers test completed without errors.
+Number of writers: 8000.
+Elapsed time: 0.388731 second(s).
+
