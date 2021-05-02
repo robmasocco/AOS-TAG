@@ -19,11 +19,14 @@
 #include "../aos-tag/include/aos-tag.h"
 
 #define fflush(stdin) while (getchar() != '\n')
+#define UNUSED(arg) (void)(arg)
 
 #define TOADD 257
 
 /* The works. */
 int main(int argc, char **argv) {
+    UNUSED(argc);
+    UNUSED(argv);
     printf("Starting instances creation test...\n");
     // Try to create all possible instances, plus one.
     for (int key = 0; key < TOADD; key++) {
