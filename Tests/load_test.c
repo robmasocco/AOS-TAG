@@ -139,7 +139,12 @@ int main(int argc, char **argv) {
         for (int j = 1; j < cpus; j++) CPU_SET(j, &major_mask);
         pthread_attr_setaffinity_np(readers_attr + i, sizeof(cpu_set_t),
                                     &major_mask);
-        pthread_create(readers_tids + i, readers_attr + i, reader, NULL);
+        if (pthread_create(readers_tids + i, readers_attr + i, reader, NULL)) {
+            fprintf(stderr, "ERROR: Failed to spawn reader no. %d.\n", i);
+            perror("pthread_create");
+            fclose(out_file);
+            exit(EXIT_FAILURE);
+        }
     }
     sleep(1);  // Give readers some time to start waiting...
     pthread_attr_init(&single_wr_attr);
@@ -147,7 +152,12 @@ int main(int argc, char **argv) {
     CPU_SET(0, &single_mask);
     pthread_attr_setaffinity_np(&single_wr_attr, sizeof(cpu_set_t),
                                 &single_mask);
-    pthread_create(&single_writer, &single_wr_attr, writer, NULL);
+    if (pthread_create(&single_writer, &single_wr_attr, writer, NULL)) {
+        fprintf(stderr, "ERROR: Failed to spawn single writer.\n");
+        perror("pthread_create");
+        fclose(out_file);
+        exit(EXIT_FAILURE);
+    }
     tic = clock();
     for (int i = 0; i < NR_READERS; i++) pthread_join(readers_tids[i], NULL);
     toc = clock();
@@ -172,7 +182,12 @@ int main(int argc, char **argv) {
             CPU_SET(j, &major_mask);
         pthread_attr_setaffinity_np(writers_attr + i, sizeof(cpu_set_t),
                                     &major_mask);
-        pthread_create(writers_tids + i, writers_attr + i, multi_writer, NULL);
+        if (pthread_create(writers_tids + i, writers_attr + i,
+                           multi_writer, NULL)) {
+            fprintf(stderr, "ERROR: Failed to spawn writer no. %d.\n", i);
+            perror("pthread_create");
+            exit(EXIT_FAILURE);
+        }
     }
     sleep(1);  // Give the writers some time to start...
     tic = clock();
