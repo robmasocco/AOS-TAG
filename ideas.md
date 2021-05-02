@@ -350,8 +350,6 @@ Full instance wakeups work in a similar fashion, as is clear from the pseudocode
 
 # EXTRAS
 
-- Definitions of system call numbers for the user code given by *make* after module insertion using *awk*/*sed* to read numbers from pseudofiles and generate the header.
-- *__randomize_layout* of some structs?
 - Docs:
     - Words first, pseudocode last. Maybe a totally different file for that.
     - A README for SCTH.
