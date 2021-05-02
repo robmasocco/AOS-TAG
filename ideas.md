@@ -65,6 +65,8 @@ Then, in its wrapper, each system call does a *try_module_get(THIS_MODULE)* befo
 
 The following pseudocode describes how all operations are performed, and contains some hints about why some choices were made about synchronization and other similar issues.
 
+Where necessary, memory order of operations is enforced through the use of instructions like memory fences and compiler barriers.
+
 ## *int tag_get(int key, int command, int permission)*
 
 Opens a new instance of the service. You can open whatever instance you want but if permissions aren't ok for you then **all subsequent *receives* and *sends* will fail**. This behavior is intended since tag descriptors don't really mean much, i.e. we need to check for them in *receive* and *send* that could be called on a different instance than the one originally intended if someone called a *REMOVE* in the meantime, so it doesn't make much sense to also check them here.
@@ -110,12 +112,10 @@ Returns 0 if the message was read, or -1 and *errno* is set to indicate the caus
 - Acquire level condition spinlock.
 - Atomically read the current *condition selector* from the level condition struct.
 - Atomically increment the current *epoch presence counter* in the level condition struct.
-- **MEMORY FENCE**
 - Release level condition spinlock.
 - Acquire instance condition spinlock.
 - Atomically read the current *global condition selector* from the instance condition struct.
 - Atomically increment the current *global epoch presence counter* in the instance condition struct.
-- **MEMORY FENCE**
 - Release instance condition spinlock.
 - Wait on the current epoch's level queue (with *wait_event_interruptible(...)*) with (*curr_condition || curr_globl_condition*). Catch signals here and be very careful about which locks to release and counters to atomically decrement upon exit!!!
 - If *curr_globl_condition == True* we've been awoken:
@@ -153,21 +153,17 @@ Returns 0 if the message was correctly sent, or -1 and *errno* is set to indicat
 - Acquire level condition spinlock.
 - Atomically read and flip the current *condition selector* from the level condition struct. This is the linearization point for the message buffer. Save the previous value.
 - Reset the new condition value to 0x0.
-- **MEMORY FENCE**
 - Release level condition spinlock.
 - Atomically read the current *epoch presence counter* from the level condition struct: exit if it is zero (no one is waiting for a message on this level, so discard yours). Remember to free the buffer!
 - Set the level message pointer to the new buffer.
 - Set message size.
-- **STORE FENCE**
 - Set the now "old" level condition to 0x1.
-- **STORE FENCE**
 - Wake up the current epoch's level wait queue (use *wake_up_all(...)*).
     Note that the APIs used prevent the "Lost wake-up problem".
     Also note that this call grabs the queue spinlock, wakes all readers that "got the message" in a single pass and then releases the queue spinlock. We're sure that all the threads that are in here must be awoken and are those that actually got the message, while those that came too late have been diverted onto the other queue.
 - Wait for the old epoch presence counter to become zero.
     Busy-wait loops while executing in the kernel are bad, I know. That's why we call *schedule()* in the loop: the current CPU will be released by the task to execute other threads, e.g. the receivers we're waiting for.
 - Set message size to 0 and buffer pointer to NULL (all registered receivers read it at this point). Save it to *kfree* it in a bit.
-- **STORE FENCE**
 - Release level senders mutex.
 - Release senders's rw_sem as reader.
 - *kfree* the message buffer.
@@ -194,10 +190,8 @@ Returns 0 if the requested operation was completed successfully, or -1 and *errn
     - Acquire instance condition spinlock.
     - Atomically read and flip the current *condition selector* from the instance condition struct. Save the previous value.
     - Reset the new condition value to 0x0.
-    - **MEMORY FENCE**
     - Release instance condition spinlock.
     - Set the now "old" global condition to 0x1.
-    - **STORE FENCE**
     - For each level in the instance:
         - Wake up both level wait queues (use *wake_up_all(...)*).
             Note that the APIs used prevent the "Lost wake-up problem".
@@ -212,7 +206,6 @@ Returns 0 if the requested operation was completed successfully, or -1 and *errn
     - Check instance pointer, eventually exit.
     - Check permissions if required (flag), eventually exit.
     - Save instance struct pointer and set it to *NULL*.
-    - **MEMORY FENCE**
     - Release senders rw_sem as writer.
     - Release receivers rw_sem as writer.
     - Check the key, if it is not *IPC_PRIVATE*:
@@ -353,7 +346,6 @@ Full instance wakeups work in a similar fashion, as is clear from the pseudocode
 # TODO LIST
 
 - Load and unload scripts, that handle *insmod*, *rmmod* and possibly compilation accordingly.
-- Try to remove memory fences and compiler barriers next to synchronization primitives operations (in a branch).
 - Documentation.
 
 # EXTRAS
