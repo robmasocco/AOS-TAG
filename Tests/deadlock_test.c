@@ -15,7 +15,6 @@
 #include <sys/types.h>
 #include <string.h>
 #include <unistd.h>
-#include <signal.h>
 #include <errno.h>
 #include <sys/ipc.h>
 #include <pthread.h>
