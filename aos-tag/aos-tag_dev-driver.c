@@ -191,7 +191,6 @@ int aos_tag_open(struct inode *inode, struct file *filp) {
     // Set session data and we're done.
     kfree(snaps);
     filp->private_data = (void *)new_stat;
-    asm volatile ("sfence" ::: "memory");
     return 0;
 }
 

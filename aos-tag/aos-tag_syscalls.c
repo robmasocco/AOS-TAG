@@ -386,7 +386,6 @@ int aos_tag_snd(int tag, int lvl, char *buf, size_t size) {
     tag_inst->mgs_sizes[lvl] = size;
     asm volatile ("sfence" ::: "memory");
     TAG_COND_VAL(&((tag_inst->lvl_conds)[lvl]), lvl_epoch) = 0x1;
-    asm volatile ("sfence" ::: "memory");
     // Wake up the current epoch's wait queue.
     wake_up_all(&((tag_inst->lvl_queues)[lvl][lvl_epoch]));
     // Wait for receivers to consume both the message and the condition.
@@ -462,7 +461,6 @@ int aos_tag_ctl(int tag, int cmd) {
         // won't get the call: they were too late.
         last_epoch = TAG_COND_FLIP(&(tag_inst->globl_cond));
         TAG_COND_VAL(&(tag_inst->globl_cond), last_epoch) = 0x1;
-        asm volatile ("sfence" ::: "memory");
         // Wake up all levels, both queues since we don't know which reader
         // got in which local epoch and we don't want to care.
         for (i = 0; i < __NR_LEVELS; i++) {

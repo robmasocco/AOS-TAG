@@ -71,7 +71,6 @@ typedef struct _tag_cond_t {
     __epoch_sel = (cond_addr)->_cond_epoch;                       \
     __atomic_add_fetch(&((cond_addr)->_pres_count[__epoch_sel]),  \
         1, __ATOMIC_RELAXED);                                     \
-    asm volatile ("mfence" ::: "memory");                         \
     spin_unlock(&((cond_addr)->_lock));                           \
     __epoch_sel; })
 
@@ -100,7 +99,6 @@ typedef struct _tag_cond_t {
     __new_epoch = __last_epoch ^ 0x1;             \
     (cond_addr)->_cond_epoch = __new_epoch;       \
     (cond_addr)->_conditions[__new_epoch] = 0x0;  \
-    asm volatile ("mfence" ::: "memory");         \
     spin_unlock(&((cond_addr)->_lock));           \
     __last_epoch; })
 
