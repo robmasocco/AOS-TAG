@@ -27,26 +27,17 @@
 
 #define UNUSED(arg) (void)(arg)
 
-#define NR_READERS 1000
-#define NR_WRITERS 1000
-
 #define KEY IPC_PRIVATE
 #define LEVEL 12
 
 cpu_set_t major_mask, single_mask;
 
-pthread_t readers_tids[NR_READERS];
-pthread_t writers_tids[NR_WRITERS];
-pthread_t single_reader, single_writer;
-
-pthread_attr_t readers_attr[NR_READERS];
-pthread_attr_t writers_attr[NR_WRITERS];
-pthread_attr_t single_wr_attr;
-
 sem_t multi_writers_sem;
 
 int tag;
+
 FILE *out_file;
+char *out_file_name = "load_tests.txt";
 
 int cpus;
 
@@ -102,17 +93,44 @@ void *multi_writer(void *arg) {
 
 /* The works. */
 int main(int argc, char **argv) {
-    UNUSED(argc);
-    UNUSED(argv);
+    // Parse input arguments.
+    int NR_READERS = 1000;
+    int NR_WRITERS = 1000;
+    if (argc != 4) {
+        fprintf(stderr, "Usage: load_test.out NR_READERS NR_WRITERS"
+                        " FILENAME\n");
+        fprintf(stderr, "Proceeding with default values of %d readers and %d"
+                        " writers.\n", NR_READERS, NR_WRITERS);
+        fprintf(stderr, "Output file will be named: %s.\n", out_file_name);
+    } else {
+        NR_READERS = atoi(argv[1]);
+        NR_WRITERS = atoi(argv[2]);
+    }
+    // Allocate test metadata and resources.
+    pthread_t readers_tids[NR_READERS];
+    pthread_t writers_tids[NR_WRITERS];
+    pthread_t single_writer;
+    pthread_attr_t readers_attr[NR_READERS];
+    pthread_attr_t writers_attr[NR_WRITERS];
+    pthread_attr_t single_wr_attr;
     cpus = get_nprocs();
     clock_t tic, toc;
     double test_times[2];
-    out_file = fopen("load_tests.txt", "w+");
+    if (argc == 4) out_file = fopen(argv[3], "w+");
+    else out_file = fopen(out_file_name, "w+");
     if (out_file == NULL) {
         fprintf(stderr, "ERROR: Failed to open output file.\n");
         perror("fopen");
         exit(EXIT_FAILURE);
     }
+    fprintf(out_file, "### AOS-TAG SEND/RECEIVE LOAD TESTS RESULTS ###\n");
+    tag = tag_get(KEY, TAG_CREATE, TAG_USR);
+    if (tag == -1) {
+        fprintf(stderr, "ERROR: Failed to create new tag service instance.\n");
+        perror("tag_get");
+        exit(EXIT_FAILURE);
+    }
+    printf("Opened new tag serivce instance with descriptor: %d.\n", tag);
     // TEST 1: Multiple readers, single writer.
     printf("Starting multiple readers, single writer test...\n");
     for (int i = 0; i < NR_READERS; i++) {
@@ -121,7 +139,12 @@ int main(int argc, char **argv) {
         for (int j = 1; j < cpus; j++) CPU_SET(j, &major_mask);
         pthread_attr_setaffinity_np(readers_attr + i, sizeof(cpu_set_t),
                                     &major_mask);
-        pthread_create(readers_tids + i, readers_attr + i, reader, NULL);
+        if (pthread_create(readers_tids + i, readers_attr + i, reader, NULL)) {
+            fprintf(stderr, "ERROR: Failed to spawn reader no. %d.\n", i);
+            perror("pthread_create");
+            fclose(out_file);
+            exit(EXIT_FAILURE);
+        }
     }
     sleep(1);  // Give readers some time to start waiting...
     pthread_attr_init(&single_wr_attr);
@@ -129,7 +152,12 @@ int main(int argc, char **argv) {
     CPU_SET(0, &single_mask);
     pthread_attr_setaffinity_np(&single_wr_attr, sizeof(cpu_set_t),
                                 &single_mask);
-    pthread_create(&single_writer, &single_wr_attr, writer, NULL);
+    if (pthread_create(&single_writer, &single_wr_attr, writer, NULL)) {
+        fprintf(stderr, "ERROR: Failed to spawn single writer.\n");
+        perror("pthread_create");
+        fclose(out_file);
+        exit(EXIT_FAILURE);
+    }
     tic = clock();
     for (int i = 0; i < NR_READERS; i++) pthread_join(readers_tids[i], NULL);
     toc = clock();
@@ -154,10 +182,16 @@ int main(int argc, char **argv) {
             CPU_SET(j, &major_mask);
         pthread_attr_setaffinity_np(writers_attr + i, sizeof(cpu_set_t),
                                     &major_mask);
-        pthread_create(writers_tids + i, writers_attr + i, multi_writer, NULL);
+        if (pthread_create(writers_tids + i, writers_attr + i,
+                           multi_writer, NULL)) {
+            fprintf(stderr, "ERROR: Failed to spawn writer no. %d.\n", i);
+            perror("pthread_create");
+            exit(EXIT_FAILURE);
+        }
     }
-    for (int i = 0; i < NR_WRITERS; i++) sem_post(&multi_writers_sem);
+    sleep(1);  // Give the writers some time to start...
     tic = clock();
+    for (int i = 0; i < NR_WRITERS; i++) sem_post(&multi_writers_sem);
     for (int i = 0; i < NR_WRITERS; i++) pthread_join(writers_tids[i], NULL);
     toc = clock();
     test_times[1] = (double)(toc - tic) / CLOCKS_PER_SEC;
