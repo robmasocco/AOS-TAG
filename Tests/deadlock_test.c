@@ -20,7 +20,7 @@
 #include <pthread.h>
 #include <sched.h>
 
-#include "../aos-tag/include/aos-tag.h"
+#include "../aos-tag.h"
 
 #define UNUSED(arg) (void)(arg)
 

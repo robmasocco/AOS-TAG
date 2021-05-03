@@ -16,7 +16,7 @@
 #include <errno.h>
 #include <sys/ipc.h>
 
-#include "../aos-tag/include/aos-tag.h"
+#include "../aos-tag.h"
 
 #define fflush(stdin) while (getchar() != '\n')
 #define UNUSED(arg) (void)(arg)

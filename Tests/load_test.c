@@ -23,7 +23,7 @@
 #include <sched.h>
 #include <time.h>
 
-#include "../aos-tag/include/aos-tag.h"
+#include "../aos-tag.h"
 
 #define UNUSED(arg) (void)(arg)
 
