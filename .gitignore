@@ -53,3 +53,6 @@ dkms.conf
 
 # VS Code stuff.
 /.vscode/
+
+# Exclude generated userspace headers.
+*.h
