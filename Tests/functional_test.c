@@ -21,7 +21,7 @@
 #define fflush(stdin) while (getchar() != '\n')
 #define UNUSED(arg) (void)(arg)
 
-#define TOADD 1001
+#define TOADD 257
 
 /* The works. */
 int main(int argc, char **argv) {
