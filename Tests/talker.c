@@ -15,7 +15,7 @@
 #include <signal.h>
 #include <errno.h>
 
-#include "../aos-tag/include/aos-tag.h"
+#include "../aos-tag.h"
 
 /* Signal handler: allows to gracefully terminate the process. */
 void term_handler(int sig) {

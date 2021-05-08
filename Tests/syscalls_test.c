@@ -12,7 +12,7 @@
 #include <stdlib.h>
 #include <signal.h>
 
-#include "../aos-tag/include/aos-tag.h"
+#include "../aos-tag.h"
 
 #define TEST_KEY 1024
 
