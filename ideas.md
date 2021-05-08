@@ -273,17 +273,6 @@ Numeric fields are accessed using atomic operations, with the *RELAXED* memory o
 
 # CHAR DEVICE DRIVER
 
-This module includes a character device driver that allows every user to check the current state of the service.
-A device file, */dev/aos_tag_status*, can be accessed and read entirely to end up with a text file that sums up the service's status.
-Suggested programs for this are:
-
-- *cat*
-- *less -f*
-
-Each line of the status device file describes a level of an active instance, with the following format:
-**TAG    KEY    CREATOR EUID    LEVEL    WAITING THREADS**
-Only active, i.e. opened by at least one thread, instances are described in this file.
-
 ## OPEN
 
 Takes a snapshot of the state of the AOS-TAG service and saves it in text form in a buffer, which acts as the file.
@@ -342,17 +331,4 @@ The wakeup condition is a particular epoch-based struct. When the epoch selector
 Writers wait for all readers that got a condition value, i.e. they busy-wait on the "old" presence counter to become zero. This represents RCU's grace period. For receivers, reading the current condition value at first, before atomically incrementing the presence counter, is very important to sync with the state, avoid deadlocks and be waited by the very next writer.
 
 Full instance wakeups work in a similar fashion, as is clear from the pseudocode above. The only difference is that the wakeup is performed on both queues for each level since we can't know, nor should we care about, in which epoch each level is, thus in which queue each thread from the current instance-global epoch is found.
-
-# TODO LIST
-
-- Load and unload scripts, that handle *insmod*, *rmmod* and possibly compilation accordingly.
-- Documentation.
-
-# EXTRAS
-
-- Docs:
-    - Words first, pseudocode last. Maybe a totally different file for that.
-    - A README for SCTH.
-        Mention that we left it as a secondary module to experiment with exported symbols, module dependencies, and module locking, but that for simplicity we just modified it a tad bit, i.e. we added a mutex to make operations atomic.
-    - Usage manual, in the main page.
 
