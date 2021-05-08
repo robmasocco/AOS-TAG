@@ -271,18 +271,18 @@ int aos_tag_rcv(int tag, int lvl, char *buf, size_t size) {
     }
     // If we got here means that there's a message. Let's get to it.
     TAG_COND_UNREG(&(tag_inst->globl_cond), globl_epoch);
-    if (tag_inst->mgs_sizes[lvl] != 0) {
+    if (tag_inst->msg_sizes[lvl] != 0) {
         unsigned long not_copied = 0;
         // Remember that zero-length messages are allowed!
         // Must only check if the provided buffer is large enough.
-        if ((buf == NULL) || (size < tag_inst->mgs_sizes[lvl])) {
+        if ((buf == NULL) || (size < tag_inst->msg_sizes[lvl])) {
             // Not enough space in the buffer.
             TAG_COND_UNREG(&((tag_inst->lvl_conds)[lvl]), lvl_epoch);
             up_read(&(tags_list[tag].rcv_rwsem));
             return -ENOBUFS;
         }
         not_copied = copy_to_user(buf, tag_inst->msg_bufs[lvl],
-                                  tag_inst->mgs_sizes[lvl]);
+                                  tag_inst->msg_sizes[lvl]);
         asm volatile ("mfence" ::: "memory");
         if (not_copied != 0) {
             // copy_to_user failed. Since it shouldn't, this service doesn't
@@ -291,7 +291,7 @@ int aos_tag_rcv(int tag, int lvl, char *buf, size_t size) {
             up_read(&(tags_list[tag].rcv_rwsem));
             return -EFAULT;
         }
-        ret = (int)(tag_inst->mgs_sizes[lvl]);  // Should still fit.
+        ret = (int)(tag_inst->msg_sizes[lvl]);  // Should still fit.
     }
     TAG_COND_UNREG(&((tag_inst->lvl_conds)[lvl]), lvl_epoch);
     up_read(&(tags_list[tag].rcv_rwsem));
@@ -385,7 +385,7 @@ int aos_tag_snd(int tag, int lvl, char *buf, size_t size) {
     }
     // Now we actually have someone to deliver to.
     if (size != 0) tag_inst->msg_bufs[lvl] = new_msg;
-    tag_inst->mgs_sizes[lvl] = size;
+    tag_inst->msg_sizes[lvl] = size;
     asm volatile ("sfence" ::: "memory");
     TAG_COND_VAL(&((tag_inst->lvl_conds)[lvl]), lvl_epoch) = 0x1;
     // Wake up the current epoch's wait queue.
@@ -401,7 +401,7 @@ int aos_tag_snd(int tag, int lvl, char *buf, size_t size) {
         schedule();
     // All done!
     if (size != 0) tag_inst->msg_bufs[lvl] = NULL;
-    tag_inst->mgs_sizes[lvl] = 0;
+    tag_inst->msg_sizes[lvl] = 0;
     asm volatile ("sfence" ::: "memory");
     mutex_unlock(&((tag_inst->snd_locks)[lvl]));
     up_read(&(tags_list[tag].snd_rwsem));

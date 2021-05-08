@@ -40,7 +40,7 @@
 typedef struct _tag_t {
     int key;                                       // Instance key.
     char *msg_bufs[__NR_LEVELS];                   // Pointers to messages.
-    size_t mgs_sizes[__NR_LEVELS];                 // Sizes of active messages.
+    size_t msg_sizes[__NR_LEVELS];                 // Sizes of active messages.
     struct mutex snd_locks[__NR_LEVELS];           // Locks for senders.
     wait_queue_head_t lvl_queues[__NR_LEVELS][2];  // Level wait queues.
     tag_cond_t lvl_conds[__NR_LEVELS];             // Level wait conditions.
