@@ -12,3 +12,4 @@ all:
 	$(CC) $(CFLAGS) -pthread -o deadlock_test.out deadlock_test.c
 	$(CC) $(CFLAGS) -o functional_test.out functional_test.c
 	$(CC) $(CFLAGS) -pthread -o load_test.out load_test.c
+	$(CC) $(CFLAGS) -o syscalls_test.out syscalls_test.c

@@ -17,7 +17,7 @@
 #define TEST_KEY 1024
 
 void sighandler(int sig) {
-    printf("Got signal: %d.\n", sig);
+    printf("\b\bGot signal: %d.\n", sig);
 }
 
 int main(void) {
