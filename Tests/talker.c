@@ -55,7 +55,7 @@ int main(int argc, char **argv) {
         memset(msg_buf, 0, bufsize);
         sprintf(msg_buf, "[%u] %s", msg_cnt, argv[3]);
         int send_res = tag_send(tag, lvl, msg_buf, strlen(msg_buf));
-        if (send_res != 0) {
+        if (send_res == -1) {
             if (errno != EINTR) {
                 fprintf(stderr, "ERROR: Failed to send message no. %u.\n",
                         msg_cnt);

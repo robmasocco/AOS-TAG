@@ -49,7 +49,7 @@ int cpus;
  */
 void *writer(void *arg) {
     UNUSED(arg);
-    if (tag_send(tag, LEVEL, NULL, 0)) {
+    if (tag_send(tag, LEVEL, NULL, 0) == -1) {
         fprintf(stderr, "ERROR: Failed to send empty message.\n");
         perror("tag_send");
         exit(EXIT_FAILURE);
@@ -65,7 +65,7 @@ void *writer(void *arg) {
  */
 void *reader(void *arg) {
     UNUSED(arg);
-    if (tag_receive(tag, LEVEL, NULL, 0)) {
+    if (tag_receive(tag, LEVEL, NULL, 0) == -1) {
         fprintf(stderr, "ERROR: Failed to receive empty message.\n");
         perror("tag_receive");
         exit(EXIT_FAILURE);
@@ -83,7 +83,7 @@ void *reader(void *arg) {
 void *multi_writer(void *arg) {
     UNUSED(arg);
     sem_wait(&multi_writers_sem);
-    if (tag_send(tag, LEVEL, NULL, 0)) {
+    if (tag_send(tag, LEVEL, NULL, 0) == -1) {
         fprintf(stderr, "ERROR: Failed to send empty message.\n");
         perror("tag_send");
         exit(EXIT_FAILURE);
