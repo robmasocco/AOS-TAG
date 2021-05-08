@@ -316,7 +316,8 @@ int aos_tag_rcv(int tag, int lvl, char *buf, size_t size) {
  * @param lvl Level of the aforementioned instance to write into.
  * @param buf Userspace buffer holding the message to send.
  * @param size Size of the aforementioned buffer.
- * @return 0 if the message was successully sent, or an error code for errno.
+ * @return 0 if the message was successully sent, 1 if no one was there, or an
+ * error code for errno.
  */
 int aos_tag_snd(int tag, int lvl, char *buf, size_t size) {
     tag_t *tag_inst;
@@ -380,7 +381,7 @@ int aos_tag_snd(int tag, int lvl, char *buf, size_t size) {
         printk(KERN_DEBUG "%s: tag_send: Discarded message on tag: %d, "
                           "level: %d.\n", MODNAME, tag, lvl);
         #endif
-        return 0;
+        return 1;
     }
     // Now we actually have someone to deliver to.
     if (size != 0) tag_inst->msg_bufs[lvl] = new_msg;

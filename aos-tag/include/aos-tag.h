@@ -134,7 +134,8 @@ static inline int tag_receive(int tag, int level, char *buffer, size_t size) {
  * @param lvl Level of the aforementioned instance to write into.
  * @param buf Buffer holding the message to send.
  * @param size Size of the aforementioned buffer.
- * @return 0 successful, or -1 and errno will be set.
+ * @return 0 if the message was successfully delivered, 1 if no one was there or
+ * -1 and errno will be set.
  */
 static inline int tag_send(int tag, int level, char *buffer, size_t size) {
     errno = 0;
