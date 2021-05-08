@@ -114,7 +114,7 @@ static inline int tag_get(int key, int command, int permission) {
  * @param lvl Level of the aforementioned instance to receive from.
  * @param buf Buffer in which to copy the new message.
  * @param size Size of the aforementioned buffer.
- * @return 0 if successful, or -1 and errno will be set.
+ * @return Size of the message if successful, or -1 and errno will be set.
  */
 static inline int tag_receive(int tag, int level, char *buffer, size_t size) {
     errno = 0;

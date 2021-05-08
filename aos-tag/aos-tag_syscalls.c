@@ -208,12 +208,12 @@ int aos_tag_get(int key, int cmd, int perm) {
  * @param lvl Level of the aforementioned instance to receive from.
  * @param buf Userspace buffer in which to copy the new message.
  * @param size Size of the aforementioned buffer.
- * @return 0 if the message was successfully copied, or an error code for errno.
+ * @return Size of the successfully copied message, or an error code for errno.
  */
 int aos_tag_rcv(int tag, int lvl, char *buf, size_t size) {
     tag_t *tag_inst;
     unsigned char lvl_epoch, globl_epoch;
-    int wait_res = 0;
+    int wait_res = 0, ret = 0;
     #ifdef DEBUG
     printk(KERN_INFO "%s: tag_receive: Called with (%d, %d, 0x%px, %lu).\n",
         MODNAME, tag, lvl, buf, size);
@@ -291,6 +291,7 @@ int aos_tag_rcv(int tag, int lvl, char *buf, size_t size) {
             up_read(&(tags_list[tag].rcv_rwsem));
             return -EFAULT;
         }
+        ret = (int)(tag_inst->mgs_sizes[lvl]);  // Should still fit.
     }
     TAG_COND_UNREG(&((tag_inst->lvl_conds)[lvl]), lvl_epoch);
     up_read(&(tags_list[tag].rcv_rwsem));
@@ -298,7 +299,7 @@ int aos_tag_rcv(int tag, int lvl, char *buf, size_t size) {
     printk(KERN_DEBUG "%s: tag_receive: Got message from tag: %d, on level "
            "%d.\n", MODNAME, tag, lvl);
     #endif
-    return 0;
+    return ret;
 }
 
 /**
