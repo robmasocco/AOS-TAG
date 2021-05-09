@@ -62,8 +62,9 @@ int main(int argc, char **argv) {
                 perror("tag_send");
                 exit(EXIT_FAILURE);
             } else break;
-        }
-        printf("Sent message no. %u.\n", msg_cnt);
+        } else if (send_res == 1)
+            printf("Discarded message no. %u.\n", msg_cnt);
+        else printf("Delivered message no. %u.\n", msg_cnt);
         msg_cnt++;
         if (usleep(period * 1000)) break;
     }
