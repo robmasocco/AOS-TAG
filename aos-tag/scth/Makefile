@@ -12,16 +12,6 @@ all:
 
 clean:
 	$(MAKE) -C /lib/modules/$(shell uname -r)/build M=$(PWD) clean
-
-install:
-	$(MAKE) -C /lib/modules/$(shell uname -r)/build M=$(PWD) modules_install
-	ln -s /lib/modules/$(shell uname -r)/extra/$(MODNAME).ko /lib/modules/$(shell uname -r)
-	depmod -a
-
-uninstall:
-	rm /lib/modules/$(shell uname -r)/extra/$(MODNAME).ko
-	rm /lib/modules/$(shell uname -r)/$(MODNAME).ko
-	depmod -a
 else
 obj-m += $(MODNAME).o
 $(MODNAME)-y := scth_main.o utils/paging_navigator.o scth_lib.o

@@ -45,5 +45,3 @@ sudo rmmod scth
 ```
 
 and *make clean* can be used to remove object files and the like from *aos-tag/*.
-
-To experiment with other tools like *depmod* and *modprobe*, some *install/uninstall* rules are included in the Makefiles of both *SCTH* and *AOS-TAG*: they create or remove the necessary symbolic links and run *depmod -a* when required. If you want, you can run those and then use *modprobe* alternatively to *insmod*.

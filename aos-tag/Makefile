@@ -15,18 +15,6 @@ all:
 clean:
 	cd scth && $(MAKE) clean
 	$(MAKE) -C /lib/modules/$(shell uname -r)/build M=$(PWD) clean
-
-install:
-	cd scth && $(MAKE) install
-	$(MAKE) -C /lib/modules/$(shell uname -r)/build M=$(PWD) modules_install
-	ln -s /lib/modules/$(shell uname -r)/extra/$(MODNAME).ko /lib/modules/$(shell uname -r)
-	depmod -a
-
-uninstall:
-	cd scth && $(MAKE) uninstall
-	rm /lib/modules/$(shell uname -r)/extra/$(MODNAME).ko
-	rm /lib/modules/$(shell uname -r)/$(MODNAME).ko
-	depmod -a
 else
 obj-m += $(MODNAME).o
 $(MODNAME)-y := aos-tag_main.o aos-tag_syscalls.o aos-tag_dev-driver.o splay-trees_int-keys/splay-trees_int-keys.o
