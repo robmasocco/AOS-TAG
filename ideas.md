@@ -67,13 +67,6 @@ Each entry holds:
 
 Numeric fields are accessed using atomic operations, with the *RELAXED* memory order since we have no specific ordering requirement.
 
-# MODULE PARAMETERS
-
-- System call numbers (one pseudofile each) (read-only).
-- Device driver major number (read-only).
-- Max number of active instances (configurable at insertion but checked: must not drop below 256) (read-only).
-- Max message size (configurable at insertion but checked: must not drop below 4 KB) (read-only). Comment in the docs/README that this better be page-aligned.
-
 # CHAR DEVICE DRIVER
 
 ## OPEN
