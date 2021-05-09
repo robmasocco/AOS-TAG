@@ -6,8 +6,6 @@
  * @date April 17, 2021
  */
 
-#include "tests_vscode_settings.h"
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <signal.h>

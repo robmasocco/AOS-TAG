@@ -6,8 +6,6 @@
  * @date May 1, 2021
  */
 
-#include "tests_vscode_settings.h"
-
 #define _GNU_SOURCE
 
 #include <stdio.h>

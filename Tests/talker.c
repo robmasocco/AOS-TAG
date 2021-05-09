@@ -6,8 +6,6 @@
  * @date May 1, 2021
  */
 
-#include "tests_vscode_settings.h"
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
