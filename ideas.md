@@ -1,72 +1,69 @@
-# GENERAL ARCHITECTURE NOTES
+# GENERAL NOTES
 
 ## KERNEL-SIDE ARCHITECTURE
 
-- Centralized architecture: there's only one binary search tree to lookup active instances, register new ones, or delete existing ones from. Indexed by keys, each entry contains the tag descriptor for that instance, if present. Only for shared instances.
-- The tag descriptor is an index in a kernel-level shared array of structs: pointers and two rw_semaphores.
-- In the array structs, first things checked by every syscall are the semaphores, then IMMEDIATELY the validity of the pointer.
-- The device file driver only has to scan the array.
-- Permissions are implemented as simple checks of the current EUID against the creator's EUID when a thread calls a *send* or a *receive* on an active instance. Such EUID is stored upon creation of the instance and checked each time it is acted upon. As for any service like this, the *root user* (aka EUID 0) can do everything everywhere.
-- System designed to be efficient without enforcing any special priority policy when executing kernel code (example: GFP_KERNEL everywhere).
+The main goal of the design process for this project was to end up with an IPC system that could, according to the specification, be efficient enough without adding any overhead to the execution of other parts of the kernel. This is the reason behind many choices that will be thoroughly described below but that we can also summarize as follows:
 
-## BINARY SEARCH TREE
+- Complete absence of critical sections in which interrupts are also blocked.
+- Very few sections in which spinning locks are acquired, only to execute a handful of instructions for which there isn't an atomic counterpart. And even in these sections only preemption is blocked, not interrupts, since per-CPU memory is never used and the system is completely independent of IRQs.
+- Almost each time a blocking operation is performed, the thread can be interrupted or killed and the state of the module is preserved.
+- Every time the system asks other parts of the kernel for something, e.g. memory, the request is done with normal priority and may actually lead the thread to sleep since these routines are not interrupt handlers.
+- When multiple threads must access a shared resource but only some of them can, sleeping synchronization primitives are used which support fairness-oriented optimistic spinning schemes, like *mutexes* and *rw_semaphores*.
 
-- Represents shared key-instance associations.
-- Is indexed by int keys.
-- Each entry is an int "tag descriptor", index in the array.
-- Must be optimized for speed, "cache-like", so a splay tree should fit right in.
-- Must be protected from concurrent access; see below.
+These design choices lay the foundations of the underlying architecture of this system, with which a thread that executes one of the system calls interacts to access an instance and fulfill the user's request.
+The architecture, consisting of data structures in kernel memory, needs to allow accesses to two kinds of instances (given of course the necessary permission checks, described later on):
+
+- *Shared* instances, i.e. those created with a key different from *IPC_PRIVATE* and that can be reopened by other threads.
+- *Private* instances, i.e. those created with *IPC_PRIVATE* from *sys/ipc.h* as key; these shall be given a tag descriptor that is not associated with any key.
+
+So a thread that wishes to interact with an instance should first create or open it with a given key, then get the corresponding tag descriptor to use in other calls.  It is evident that two different data structures are required to solve the two steps: a *dictionary* that allows to quickly recover the tag descriptor associated to a **shared** instance, if any, and an *array* that can be used to immediately access an instance given its tag descriptor. In this project, the dictionary is implemented as a particular kind of binary search tree.
+
+### BST Dictionary
+
+This dictionary holds *key-tag descriptor* pairs of the instances that were not created as *IPC_PRIVATE*, thus meant to be shared. It is indexed by keys and each node stores, together with the necessary pointers, the tag descriptor of the corresponding instance.
+Concurrent accesses to this structure are regulated with an rw_semaphore that allows multiple readers to perform queries and single writers to update it, adding or removing nodes, whilst excluding all readers and other writers.
+While an AVL tree would have certainly worked in this scenario, the choice has been made to optimize the dictionary even more considering an average usage pattern: it is reasonable to suppose that after a shared instance is created, and its node added to the tree, such instance will be referenced again multiple times by other threads that want to open it, possibly after a short time. The tree should then work like a *cache*: exploiting temporal locality with spatial locality by keeping "recent" nodes close to the root, making searches quicker.
+The BST that best fits these requirements without being too complicated is the **splay tree**, and it is how the BST dictionary is implemented in this project. Simply put, it differs from an AVL in the fact that each time a node is accessed, for any kind of operation, an heuristic named *splay* is performed on that node consisting in a series of rotations to bring it to the root. Balance of the tree is not explicitly maintained, so searches prove to be efficient only in an amortized analysis, but the space that each node requires and the time needed to perform rotations are less since no balancing information has to be stored, checked or updated.
+The only difference from the original version proposed by D. Sleator and R. Tarjan lies in the fact that we want to allow searches to be performed concurrently, which is not possible if at the end we need to splay the node (or the leaf node we end up at). Thus, **in this implementation we do not splay after searches**. This has the side effect that particularly pathological usage patterns may lead to a completely unbalanced tree, in which a search could have linear cost. This is indeed a compromise that we intend to make.
+
+### Instances Array
+
+As previously stated, this array allows to access every instance in the system given its tag descriptor, which is simply a valid index in it.
+Each entry in this array consists of a struct holding three members:
+
+- A pointer to the corresponding *tag struct* holding all data necessary to represent an instance and its levels.
+- Two rw_semaphores, required to regulate concurrent access to an instance according to the specification, by threads that need to perform any of the allowed operations. The usage of these semaphores will be clearly explained in the Syncrhonization section later on.
+
+Remember that, by specification, a thread can access an instance if it knows the tag descriptor and has compatible permissions, i.e. it can skip the reopening step. Thus, we need a way to check whether an instance if really *present* before acting on it. This is why each system call but *tag_get*, while accessing an entry in the array, first checks if the pointer to the *tag struct* is valid or not. Routines that need to create or remove instances act on such pointers very quickly: they set it when the *tag struct* is ready to be accessed or set it to NULL first and then start the removal process.
+The contents of each *tag struct* can be summarized as follows:
+
+- Key.
+- For the levels, arrays of 32:
+    - Pointers to message buffers.
+    - Sizes of the messages stored.
+    - Mutexes to mutually exclude senders on each level.
+    - Array of 2 wait queues.
+    - Level *conditions structs*.
+- Creator EUID.
+- *Protection-enabled* binary flag. Set by *tag_get* upon instance creation, enables permissions checks for subsequent operations.
+- Mutex to mutually exclude threads that execute an *AWAKE ALL*.
+- Instance-global *condition struct*.
+
+*Condition structs* are used to materialize points in time when a message is delivered to the threads that could start to wait for it in time to get it, and when threads that started to wait on any level of an instance are awaken by a call to *tag_ctl(AWAKE_ALL)*. They implement an epoch-based scheme similar to what happens in RCU linked lists. Their use will be described later, and their contents are:
+
+- One atomic *epoch selector*.
+- Array of two *conditions*.
+- Array of two atomic *presence counters*.
+- A spinlock to allow for multiple operations to be performed atomically.
+
+Much of the code regarding conditions is implemented as macros included in the header *utils/aos-tag_conditions.h*, which is adequately documented.
 
 ## MODULE LOCKING
 
 A very simple module locking scheme is implemented in this project to ensure that syscalls do not end up operating on stale, inconsistent, not-anymore-present data (especially blocking ones), possibly causing kernel oopses or worse.
 The *SCTH* module is a dependency, so it is locked upon insertion and released upon removal.
-Then, in its wrapper, each system call does a *try_module_get(THIS_MODULE)* before attempting to execute its real code.
-**Note that, due to how the module locking feature is implemented in the Linux kernel, this still leaves room for some really impossible race conditions that would consist in a system call executing code that lies in a released memory region (the part before the _try\_module\_get_). This is the best that we can do. Causing the aforementioned condition during normal execution would require surgical scheduler precision, excellent timing, and a strong will to wreak havoc. We assume that a user knows when to remove the module, and do all that is possible to prevent damage anywhere we can.**
-
-# DATA STRUCTURES AND TYPES
-
-## BST-DICTIONARY
-
-This dictionary holds *key-tag descriptor* pairs of the instances that were **NOT** created as *IPC_PRIVATE*, thus meant to be shared. Goes with an rw_semaphore to synchronize accesses (see below), which is embedded into the structure and automatically used as part of the normal operations, so completely transparent to the code that uses the BST. Each node holds:
-
-- int key, the dictionary key.
-- int tag descriptor, index in the shared instances array.
-- Pointers to make the tree work as a linked structure.
-
-## INSTANCES ARRAY
-
-Array of structs with protected instance pointers, indexed by "tag descriptor".
-
-Goes with a bitmask that tells its current state, protected by a spinlock.
-
-Each entry holds:
-
-- Pointer to the corresponding instance data structure, meant to be NULL when the instance hasn't been created.
-- Receivers rw_semaphore.
-- Senders rw_semaphore.
-
-## INSTANCE DATA STRUCTURE
-- Key.
-- For the levels, arrays of 32:
-    - char * pointers to message buffers.
-    - size_t sizes of the messages stored.
-    - Mutexes to mutually exclude senders on each level.
-    - Array of 2 wait queues.
-    - Level conditions structs.
-- Creator EUID.
-- Protection-enabled binary flag. Set by *tag_get* upon instance creation, enables permissions checks for subsequent operations.
-- Mutex to mutually exclude threads that execute an *AWAKE_ALL*.
-- Instance-global condition struct.
-
-## CONDITION DATA STRUCTURE
-
-- One atomic char *epoch selector*.
-- Array of two char *conditions*.
-- Array of two atomic long *presence counters*.
-- spinlock "condition lock".
-
-Numeric fields are accessed using atomic operations, with the *RELAXED* memory order since we have no specific ordering requirement.
+Then, in its wrapper, each system call does a *try_module_get(THIS_MODULE)* before attempting to execute its real code, and terminates with a *module_put*.
+Note that, due to how the module locking feature is implemented in the Linux kernel, this still leaves room for some really impossible race conditions that would consist in a system call executing code that lies in a released memory region (the part before the _try\_module\_get_). This is the best that we can do. Causing the aforementioned condition during normal execution would require surgical scheduler precision, excellent timing, and a strong will to wreak havoc. We assume that a user knows when to remove the module, and do all that is possible to prevent damage anywhere we can.
 
 # CHAR DEVICE DRIVER
 
@@ -97,10 +94,6 @@ Some sections rely on a light use of:
 - Spinning locks, in the form of spinlocks, to guard status-critical data structures. Critical sections involving these have been kept as small and quick as possible, and are meant to be executed ASAP, so we'd like some speed also while locking. But we're not coding interrupt handlers, so we don't need the additional overhead that comes when blocking IRQs, which is why we use only the basic APIs.
     One last word about the ***condition structure* lock**: could we have used an *rwlock* there, instead of a spinlock? Sure, most of the time this is accessed by readers and a lock is really needed only to prevent a particularly bad race condition, so why the full exclusion? Because compared to spinlocks, especially when the critical section is short, rwlocks are [slow](https://www.kernel.org/doc/html/latest/locking/spinlocks.html#lesson-2-reader-writer-spinlocks), effectively slower than using a fully exclusive spinning lock. Considering that the critical sections that involve such structure are only made of one or two simple atomic operations, the choice has favored spinlocks instead of rwlocks.
 
-## ACCESS TO THE BST-DICTIONARY
-
-There's just an rw_semaphore to acquire and release: as a reader when making a query, as a writer when cutting an instance out or adding one. It is embedded into the data structure and its usage is part of the normal operations.
-
 ## ACCESS TO AN INSTANCE, REMOVAL, ADDITION
 
 There are 4 kinds of threads: *receivers*, *senders*, *removers*, *adders*.
@@ -128,4 +121,6 @@ The wakeup condition is a particular epoch-based struct. When the epoch selector
 Writers wait for all readers that got a condition value, i.e. they busy-wait on the "old" presence counter to become zero. This represents RCU's grace period. For receivers, reading the current condition value at first, before atomically incrementing the presence counter, is very important to sync with the state, avoid deadlocks and be waited by the very next writer.
 
 Full instance wakeups work in a similar fashion, as is clear from the pseudocode above. The only difference is that the wakeup is performed on both queues for each level since we can't know, nor should we care about, in which epoch each level is, thus in which queue each thread from the current instance-global epoch is found.
+
+## TESTING
 
