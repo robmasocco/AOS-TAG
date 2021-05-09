@@ -16,13 +16,13 @@ The system calls provided allow a thread to:
 - Wake up all threads waiting on levels of an instance, interrupting their sleep like a signal would do.
 - Remove an instance from the system.
 
-On each of the aforementioned operations security checks are enforced to ensure that the calling thread is allowed to perform such call, and is providing coherent input arguments to the kernel code.
+On each of the aforementioned operations security checks are enforced to ensure that the calling thread is allowed to perform such call, and is providing coherent input arguments to the kernel code. Root user (EUID 0) has, by design, full control.
 
 For a thorough description of the underlying architecture and some notes about testing see [ideas.md](ideas.md).
 
 ## Dependencies
 
-This module depends on two other works, entirely included in this repository and developed by myself:
+This module depends on two other works, both included in this repository and developed by myself:
 
 - A kernel module to "hack" the system call table, i.e. to locate it in main memory and replace entries in it. It is called **_System Call Table Hacker - SCTH_**, was developed as one of the course homeworks and later improved after the public solution discussion. It is included in the *scth/* folder, gets compiled as a secondary module when building *aos-tag*, and must be inserted before it since this service depends on it to be correctly initialized. Proper module locking on it is also performed.
     It has been left as a secondary module and not integrated in the final project to experiment with module locking, Kbuild compilation and linking dependencies, and exported symbols. It exposes four functions to the kernel software allowing to locate the system call table, alter and restore its entries, thus providing a simple interface to install new system calls, which is exactly what AOS-TAG has to do in its initialization routine. Some module parameters can also be specified during insertion to manually provide some hints about the table position in main memory, like the number of effective entries and the indexes of those mapped to *sys_ni_syscall*, which the module will replace on demand. It's also been a nice playground to experiment with many low-level architectural concepts and topics touched upon during the course.
@@ -41,15 +41,30 @@ Each stub is properly documented in the header. For completeness, such documenta
 
 - **_int tag_get(int key, int command, int permission)_:** Opens a new instance of the service, or reopens an existing one. Instances can be shared or not, depending on the value of *key*. An instance can be created or reopened, depending on the value of *cmd*. With *perm*, it is possible to specify whether permission checks should be peformed to limit access to threads executing on behalf of the same user that created the instance. Use the _TAG\_*_ flags for command and permission. Returns a valid tag descriptor, or -1 and *errno* will be set to indicate an error among:
 
-    - lala
+    - EINVAL: Invalid input arguments.
+    - EINTR: Interrupted by signal.
+    - ENOKEY: Asked to reopen an instance which doesn't exist.
+    - EALREADY: Asked to create an instance with a key that corresponds to another existing instance.
+    - ENOMEM: No memory available or maximum limit of active instances reached.
 
 - **_int tag_receive(int tag, int level, char *buffer, size_t size)_:** Allows a thread to receive a message from a level of an instance. The instance should have been previously opened with tag_get, however presence and permissions checks are always performed. The provided buffer must be large enough to store the new message. Returns the number of bytes read if the operations was successfully completed, or -1 and *errno* will be set to indicate an error among:
 
-    - lala
+    - EINVAL: Invalid input arguments.
+    - EINTR: Interrupted by signal.
+    - EIDRM: Requested tag instance is not present.
+    - EACCES: User not allowed to receive messages from this instance.
+    - ECANCELED: Interrupted by an *AWAKE ALL*.
+    - ENOBUFS: Provided buffer is too small to hold the latest message.
+    - EFAULT: Failed to copy the message from kernel to user memory; the buffer contents are undefined.
 
 - **_int tag_send(int tag, int level, char *buffer, size_t size)_:** Allows a thread to send a message on a level of an instance. The instance should have been previously opened with *tag_get*, however presence and permissions checks are always performed. I/O is packetized: the entire size of the buffer provided will be copied for distribution to readers. The operation will fail if this is not possible. Note again that zero-length messages are allowed, and their effect will simply be to wake up readers. Returns 0 if the message was successfully delivered, 1 if it was discarded because no reader was there to get it, or -1 and *errno* will be set to indicate an error among:
 
-    - lala
+    - EINVAL: Invalid input arguments.
+    - EINTR: Interrupted by signal.
+    - EIDRM: Requested tag instance is not present.
+    - EACCES: User not allowed to receive messages from this instance.
+    - ENOMEM: Not enough memory to deliver the provided message.
+    - EFAULT: Failed to copy the message from user to kernel memory.
 
 - **_int tag_ctl(int tag, int command)_:** Once the tag descriptor has been retrieved via *tag_get*, allows to control an instance. Supported commands are:
 
@@ -58,7 +73,10 @@ Each stub is properly documented in the header. For completeness, such documenta
 
     Use the *TAG_\** flags for *command*. Returns 0 if the operation was successfully completed, or -1 and *errno* will be set to indicate an error among:
 
-    - lala
+    - EINVAL: Invalid input arguments.
+    - EINTR: Interrupted by signal.
+    - EIDRM: Requested tag instance is not present.
+    - EACCES: User not allowed to receive messages from this instance.
 
 ## Checking system status
 
