@@ -7,6 +7,7 @@
 - In the array structs, first things checked by every syscall are the semaphores, then IMMEDIATELY the validity of the pointer.
 - The device file driver only has to scan the array.
 - Permissions are implemented as simple checks of the current EUID against the creator's EUID when a thread calls a *send* or a *receive* on an active instance. Such EUID is stored upon creation of the instance and checked each time it is acted upon. As for any service like this, the *root user* (aka EUID 0) can do everything everywhere.
+- System designed to be efficient without enforcing any special priority policy when executing kernel code (example: GFP_KERNEL everywhere).
 
 ## BINARY SEARCH TREE
 
