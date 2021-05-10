@@ -29,7 +29,13 @@ make clean
 
 ## The manual way
 
-The module can be manually built inside *aos-tag/* using *make*. The Makefile specifies recursive calls to compile *SCTH* and then *AOS-TAG*, so a single command is necessary.
+The module can be manually built inside *aos-tag/* using *make*. Debug prints can be enabled in many parts of the module by typing:
+
+```bash
+make DEBUG=1
+```
+
+The Makefile specifies recursive calls to compile *SCTH* and then *AOS-TAG*, so a single command is necessary.
 Then, from inside *aos-tag/*, to insert the module you have to run:
 
 ```bash
