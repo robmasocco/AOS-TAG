@@ -6,7 +6,7 @@ The main goal of the design process for this project was to end up with an IPC s
 
 - Complete absence of critical sections in which interrupts are also blocked.
 - Very few sections in which spinning locks are acquired, only to execute a handful of instructions for which there isn't an atomic counterpart. And even in these sections only preemption is blocked, not interrupts, since per-CPU memory is never used and the system is completely independent of IRQs.
-- Almost each time a blocking operation is performed, the thread can be interrupted or killed and the state of the module is preserved.
+- Each time a blocking operation is performed, the thread can be interrupted or killed and the state of the module is preserved.
 - Every time the system asks other parts of the kernel for something, e.g. memory, the request is done with normal priority and may actually lead the thread to sleep since these routines are not interrupt handlers.
 - When multiple threads must access a shared resource but only some of them can, sleeping synchronization primitives are used which support fairness-oriented optimistic spinning schemes, like *mutexes* and *rw_semaphores*.
 
@@ -60,21 +60,21 @@ Much of the code regarding conditions is implemented as macros included in the h
 
 # SYNCHRONIZATION
 
-Each synchronization scheme implemented, that makes the basic aforementioned operations work, is thoroughly described below, though the pseudocode above should have already given many hints.
-Some sections rely on a light use of:
+Each synchronization scheme implemented, that makes all operations work, will now be thoroughly described.
+As has been stated above, these rely on a light use of:
 
-- Sleeping locks, in the form of mutexes and rw_semaphores. The last ones are used primarily as presence counters, with the ability to exclude threads when needed without holding CPUs.
-    You may have noticed from the pseudocode above that when each of these locks is requested, the *interruptible/killable* variants of the APIs are used. This is intended because since any thread can request access to any tag entry in the instance array, independently of the instance effectively being active or not and of permissions allowing the following operations on it, there could be some activity on an instance. In the unfortunate (and unlikely, under normal usage) case that such activity is extensive and the call that tries to lock the rw_sems/mutexes blocks for too much time, it can be aborted with a signal.
-    Since the semaphores are there to manage access to the internal state of the service and not really to wait indefinitely for events (like e.g. messages), and the *interruptible* variant for rw_semaphores is still quite [recent](https://www.spinics.net/lists/kernel/msg3759815.html), the *killable* variant is used almost everywhere, so in case of emergency *SIGKILL* should be used. When these interruptions occur, the calls try to return to user mode as soon as possible, releasing all the resources and memory they can in the process without taking any other lock.
-    **When such variants aren't used it's because other threads, by either terminating successfully or being killed, will inevitably release the semaphore, and the last thread will successfully terminate without leaving an inconsistent module state.**
-- Spinning locks, in the form of spinlocks, to guard status-critical data structures. Critical sections involving these have been kept as small and quick as possible, and are meant to be executed ASAP, so we'd like some speed also while locking. But we're not coding interrupt handlers, so we don't need the additional overhead that comes when blocking IRQs, which is why we use only the basic APIs.
-    One last word about the ***condition structure* lock**: could we have used an *rwlock* there, instead of a spinlock? Sure, most of the time this is accessed by readers and a lock is really needed only to prevent a particularly bad race condition, so why the full exclusion? Because compared to spinlocks, especially when the critical section is short, rwlocks are [slow](https://www.kernel.org/doc/html/latest/locking/spinlocks.html#lesson-2-reader-writer-spinlocks), effectively slower than using a fully exclusive spinning lock. Considering that the critical sections that involve such structure are only made of one or two simple atomic operations, the choice has favored spinlocks instead of rwlocks.
+- Sleeping locks, in the form of mutexes and rw_semaphores. The last ones are used primarily as presence counters, with the ability to exclude threads when needed without holding CPUs should the optimistic spinning scheme they embed fail.
+    When each of these locks is requested, the *interruptible/killable* variants of the APIs are used. This is intended because since any thread can request access to any tag entry in the instance array, independently of the instance effectively being active or not and of permissions allowing the subsequent operations on it, there could always be some activity on an entry of the instance array. In the unfortunate (and unlikely, under normal usage) case that such activity is extensive and the call that tries to lock the rw_sems/mutexes blocks for too much time, it can be aborted with a signal.
+    Since the semaphores are there to manage access to the internal state of the service and not really to wait indefinitely for events (like e.g. messages), and the *interruptible* variant for rw_semaphores is still quite [recent](https://www.spinics.net/lists/kernel/msg3759815.html), the *killable* variant is used almost everywhere, so in case of emergency *SIGKILL* should be used. When these interruptions occur, the calls try to return to user mode as soon as possible, releasing all the resources and memory they can in the process without taking any other lock. Note that each time an interruption can occur, the internal state of the system can never be left corrupted.
+    **When such variants aren't used it's because other threads, by either terminating successfully or being killed, will inevitably release the locks, and then the last thread will successfully terminate without leaving an inconsistent module state.**
+- Spinning locks, in the form of spinlocks, to guard status-critical data structures. Critical sections involving these have been kept as small and quick as possible, and are meant to be executed as soon as possible.
+    One last word about the ***condition structure* lock**: could I have used an *rwlock* there, instead of a spinlock? Sure, most of the time this is accessed by readers and a lock is really needed only to prevent a particularly bad race condition, so why the full exclusion? Because compared to spinlocks, especially when the critical section is short, rwlocks are [slow](https://www.kernel.org/doc/html/latest/locking/spinlocks.html#lesson-2-reader-writer-spinlocks), effectively slower than using a fully exclusive spinning lock. Considering that the critical sections that involve such structure are only made of one or two simple atomic operations, my choice has been in favor of spinlocks instead of rwlocks.
 
-TODO Fences.
+Finally, there are a few sections in which memory operations need to be performed in a particular order, or where we need to be sure that e.g. stores have been executed before proceeding to the next instruction. In those points, the desired ordering is enforced with appropriate memory fencing assembly instructions and compiler barriers.
+
+In the rest of the section we will refer to four kinds of threads, depending on the kind of operation they are executing: *receivers*, *senders*, *removers*, *adders*.
 
 ## ACCESS TO AN INSTANCE, REMOVAL, ADDITION
-
-There are 4 kinds of threads: *receivers*, *senders*, *removers*, *adders*.
 
 Keep in mind that senders and removers always return, never deadlock, so their critical section time is always constant or at least finite. Each entry in the array holds two rw_semaphores and a pointer. Remember that *lock* and *unlock* are called *down* and *up* for semaphores. The first rw_sem is for receivers as readers, the second is for senders as readers, both are for removers as writers.
 
