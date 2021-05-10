@@ -29,7 +29,7 @@ make clean
 
 ## The manual way
 
-The module can be manually built inside *aos-tag/* using *make*. Debug prints can be enabled in many parts of the module by typing:
+The module can be manually built inside *aos-tag/* using *make*. Debug printks can be enabled in many parts of the module by typing:
 
 ```bash
 make DEBUG=1
