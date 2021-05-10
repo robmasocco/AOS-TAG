@@ -25,7 +25,7 @@ Concurrent accesses to this structure are regulated with an rw_semaphore that al
 While an AVL tree would have certainly worked in this scenario, the choice has been made to optimize the dictionary even more considering an average usage pattern: it is reasonable to suppose that after a shared instance is created, and its node added to the tree, such instance will be referenced again multiple times by other threads that want to open it, possibly after a short time. The tree should then work like a *cache*: exploiting temporal locality with spatial locality by keeping "recent" nodes close to the root, making searches quicker.
 The BST that best fits these requirements without being too complicated is the **splay tree**, and it is how the BST dictionary is implemented in this project. Simply put, it differs from an AVL in the fact that each time a node is accessed, for any kind of operation, an heuristic named *splay* is performed on that node consisting in a series of rotations to bring it to the root. Balance of the tree is not explicitly maintained, so searches prove to be efficient only in an amortized analysis, but the space that each node requires and the time needed to perform rotations are less since no balancing information has to be stored, checked or updated.
 The only difference from the original version proposed by D. Sleator and R. Tarjan lies in the fact that we want to allow searches to be performed concurrently, which is not possible if at the end we need to splay the node (or the leaf node we end up at). Thus, **in this implementation we do not splay after searches**. This has the side effect that particularly pathological usage patterns may lead to a completely unbalanced tree, in which a search could have linear cost. This is indeed a compromise that we intend to make. Another optimization that has been chosen has to do with caching of nodes: given how small nodes are in term of size of the corresponding struct, a compiler optimization has been added to align them to the x86 cache line size.
-The code for this data structure, based on *kmalloc* for the dynamic allocation of nodes, can be found in the *splay-trees_int-keys/* subdirectory.
+The code for this data structure, based on *kmalloc* for the dynamic allocation of nodes, can be found in the *aos-tag/splay-trees_int-keys/* subdirectory.
 
 ### Instances Array
 
@@ -61,9 +61,9 @@ Much of the code regarding conditions is implemented as macros included in the h
 
 The instance array comes with an associated bitmask, implemented as an array of *ulongs* with a set of macros defined in *utils/aos-tag_bitmask.h*. The point of this auxiliary structure is to quickly get a free spot when adding a new instance, if any. Given how quickly it is accessed, it is protected with a spinlock.
 
-# SYNCHRONIZATION
+# OPERATIONS AND SYNCHRONIZATION DETAILS
 
-Each synchronization scheme implemented, that makes all operations work, will now be briefly but thoroughly described.
+Each synchronization and operation scheme implemented will now be briefly but thoroughly described. What will not described here is a series of small operational details of the single four system calls that can easily be inferred from their source code, contained in the file *aos-tag_syscalls.c*.
 As has been stated above, these rely on a light use of:
 
 - Sleeping locks, in the form of mutexes and rw_semaphores. The last ones are used primarily as presence counters, with the ability to exclude threads when needed without holding CPUs should the optimistic spinning scheme they embed fail.
@@ -75,7 +75,7 @@ As has been stated above, these rely on a light use of:
 
 Finally, there are a few sections in which memory operations need to be performed in a particular order, or where we need to be sure that e.g. stores have been executed before proceeding to the next instruction. In those points, the desired ordering is enforced with appropriate memory fencing assembly instructions and compiler barriers.
 
-In the rest of the section we will refer to four kinds of threads, depending on the kind of operation they are executing: *receivers*, *senders*, *removers*, *adders*.
+In the rest of the section we will refer to four kinds of threads, depending on the kind of operation they are executing: *receivers*, *senders*, *removers*, *adders*, respectively those executing a *tag_receive*, *tag_send* (or *tag_ctl(AWAKE_ALL)*), *tag_ctl(REMOVE)*, *tag_get(TAG_CREATE)*. All threads except those that perform a *tag_get* check permissions immediately after accessing an instance.
 
 ## ACCESS TO AN INSTANCE, REMOVAL, ADDITION
 
@@ -86,7 +86,7 @@ When a receiver comes it locks its semaphore as reader, checks the pointer, does
 When a sender comes it locks its semaphore as reader, checks the pointer, does its thing and unlocks the semaphore as reader.
 This way, if an instance is being accessed by a thread that *could* block, according to the specification we do not try to remove it, but if it is being accessed by a thread that *won't* block, we shall wait a bit.
 
-Things are a little bit different when adding an instance: at first, the bitmask is atomically checked for a free spot, then the adder thread locks both rw_sems as writer since being the pointer *NULL*, eventual readers/writers would almost immediately get out, then sets the pointer to that of a new instance struct. The BST is kept locked during this in order to avoid adding a same key possibly multiple times.
+Things are a little bit different when adding an instance: at first, if the key is not in the BST, the bitmask is atomically checked for a free spot, then the adder thread locks both rw_sems as writer since being the pointer *NULL*, eventual readers/writers would almost immediately get out, then sets the pointer to that of a new instance struct. The BST is kept locked during this in order to avoid adding a same key possibly multiple times. Of course, if just a *tag_get(TAG_OPEN)* is requested, only the initial BST search step is performed.
 
 Also, threads that come from the VFS while doing an *open* must synchronize with *adders* and *removers* to take a snapshot of each instance before it fades away. This can be accomplished by trylocking the senders rw_sem and checking the instance pointer, as will be explained later on.
 
@@ -99,7 +99,10 @@ The sender posts a message in a buffer that is then linked in the instance struc
 When the epoch selector in the *condition struct* gets flipped, that's a linearization point for the message buffer: all receivers that got in there before this will get the message, others were too late. The only difference is the need for a spinlock in the struct to avoid that the epoch selector gets flipped before a receiver can atomically increment the corresponding epoch presence counter: this is required here because if not, there could be some unlikely but dangerous race conditions that would lead to a receiver registering to an epoch that is *two times ahead* the one that it believes to be in, thus behaving incorrectly and skipping a message that it should get.
 
 Senders wait for all receivers that got a condition value, i.e. they "busy-wait" on the "old" presence counter to become zero. This represents RCU's grace period. Since it is not advisable to implement in the kernel busy-wait loops that depend on updates from other threads (think about a single-core system...), while the counter isn't zero the scheduler is invoked, so in a single-core system the sender would voluntarily relinquish the CPU in favor of receivers. This has been proved to work in one of the testers, with acceptable performance.
-For receivers, reading the current condition value at first, before atomically incrementing the presence counter, is very important to sync with the state, avoid deadlocks and be waited by the very next writer.
+
+For receivers, reading the current condition value at first, before atomically incrementing the presence counter, is very important to sync with the state, avoid deadlocks and be waited by the very next writer. They just register on an epoch and go to sleep, then get woken up, check what happened (a new message, a signal or an *AWAKE ALL*) and act accordingly, deregistering from their epoch when appropriate. Note that they always decrement their presence counter before terminating in any way, so the wait loop the sender is in will always get to an end.
+
+In both senders and receivers, memory operations like *copy_to/from_user* are performed only if the new message has a nonzero length.
 
 Full instance wakeups work in a similar fashion. The only difference is that the wakeup is performed on both queues for each level since we can't know, nor should we care about, in which epoch each level is, thus in which queue each thread from the current instance-global epoch is found.
 
@@ -109,8 +112,6 @@ A very simple module locking scheme is implemented in this project to ensure tha
 The *SCTH* module is a dependency, so it is locked upon insertion and released upon removal.
 Then, in its wrapper, each system call does a *try_module_get(THIS_MODULE)* before attempting to execute its real code, and terminates with a *module_put*.
 Note that, due to how the module locking feature is implemented in the Linux kernel, this still leaves room for some really impossible race conditions that would consist in a system call executing code that lies in a released memory region (the part before the _try\_module\_get_). This is the best that we can do. Causing the aforementioned condition during normal execution would require surgical scheduler precision, excellent timing, and a strong will to wreak havoc. We assume that a user knows when to remove the module, and do all that is possible to prevent damage anywhere we can.
-
-# OPERATIONS DETAILS
 
 # CHARACTER DEVICE DRIVER
 
@@ -128,3 +129,7 @@ A call to *close* will then invoke the *release* function, which simply releases
 
 # TESTING
 
+Tests on this module have been carried out in two ways: *functional* and *performance* testing. The first set of testers had the goal to prove that each feature required in the specification actually worked, while the second one needed to investigate how efficiently this system could run.
+Each of the testers will now be briefly described, together with its results. Their code can be found in the *Tests/* subdirectory.
+
+## syscalls_test.c
