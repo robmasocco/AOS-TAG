@@ -133,3 +133,33 @@ Tests on this module have been carried out in two ways: *functional* and *perfor
 Each of the testers will now be briefly described, together with its results. Their code can be found in the *Tests/* subdirectory.
 
 ## syscalls_test.c
+
+This simple tester can be used to check that the system calls work, and produce the correct results (or error codes) when invoked. In the current version, the calling thread is asked to read from an instance level, so SIGINT or a similar signal has to be sent to wake it up.
+
+## talker.c & listener.c
+
+These two programs allow to try out the message system, echoing a stream of a given message from a talker process to any number of listeners.
+
+The talker requires a key to open a new instance, a level, a message string and a period in milliseconds that defines the message sending rate. A counter will be added to the message's contents, and of course zero is an allowed period.
+The listener only requires a key and a level. It will print the message together with its size (in bytes).
+
+The two processes will then behave as the specification requires until interrupted. When the writer is interrupted, an *AWAKE ALL* is called on the whole instance, which is then removed.
+
+## functional_test.c
+
+This tester was meant to try out a vast majority of features primarily regarding an instance creation and removal, and message posting. Since almost all of this has been done with *talker* and *listener*, the only feature it tests is the possibility to create, and subsequently remove, all possible instances, checking the status device file in the meantime.
+
+## deadlock_test.c
+
+This tester proves that the message posting scheme works also in single-core systems.
+A certain number of readers (currently 50) and a writer are initially spawned, with affinity settings that pin them all on a single CPU. The writer has to post a message and then terminate, the readers have to wait for a message and then exit. This is done a number of times (currently 3), with a sleep timer in the writer to ensure that all readers get back to wait after a message is delivered.
+All threads rejoin the main thread, and the process terminates successfully.
+
+## load_test.c
+
+This tester was meant to investigate the performances of this system.
+We have many factors at play, especially considering that this code runs in the kernel and must be reached via a GATE.
+Essentially, operations can be divided in two groups: those interacting with the BST and those handling messages.
+About the first group, all depends on the actual performance of the data structure employed, which is thoroughly described [here](https://www.cs.cmu.edu/~sleator/papers/self-adjusting.pdf).
+About the second group, much has already been told, however the only metric that has been valued in this project is *perceived user space latency* of a group of read or write operations on a single level of an instance. TODO
+
