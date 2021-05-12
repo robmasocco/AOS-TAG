@@ -132,6 +132,13 @@ A call to *close* will then invoke the *release* function, which simply releases
 # TESTING
 
 Tests on this module have been carried out in two ways: *functional* and *performance* testing. The first set of testers had the goal to prove that each feature required in the specification actually worked, while the second one needed to investigate how efficiently this system could run.
+
+Tests have been performed on a virtual machine running in Oracle VM VirtualBox with KVM support enabled. The guest system was an installation of Xubuntu 20.10 running kernel 5.8 on 8 cores out of 16 from the host system, and using up to 8 GB of RAM out of 16 from the host system. The host system's basic specs were:
+
+- **CPU:** AMD Ryzen 7 3700X, 8c/16t, L1: 512 KB, L2: 4 MB, L3: 32 MB, up to 4.4 GHz of boost clock.
+- **RAM:** G.Skill Trident Z Neo, DDR4, dual channel, 16 GB, 3600 MHz.
+- **OS:** Arch Linux, kernel 5.11.
+
 Each of the testers will now be briefly described, together with its results. Their code can be found in the *Tests/* subdirectory.
 
 ## syscalls_test.c
@@ -163,5 +170,16 @@ This tester was meant to investigate the performances of this system.
 We have many factors at play, especially considering that this code runs in the kernel and must be called via a GATE.
 Essentially, operations can be divided in two groups: those interacting with the BST and those handling messages.
 About the first group, everything depends on the actual performance of the data structure employed, which is thoroughly described [here](https://www.cs.cmu.edu/~sleator/papers/self-adjusting.pdf). As already noted, the only two differences from the original implementation are the absence of the *splay* step in the search operation, and the join-based deletion scheme.
-About the second group, much has already been told, however the only metric that has been valued in this project is **perceived user space latency** of a group of read or write operations on a single level of an instance. TODO
+About the second group, much has already been told, however the only metric that has been valued in this project is **perceived user space latency** of a group of read or write operations on a single level of an instance. Considering negligible the jitter induced by the OS scheduler, latencies will be mainly influenced by the fact that:
+
+- A group of writers, even when delivering to a single reader thread, has to synchronize on a same level by acquiring a mutex.
+- Readers must wake from the wait queue before consuming the message.
+
+This program takes in input a number of readers and one of writers to spawn, and the name of a file to log results in.
+It then proceeds to create a new instance and runs two tests:
+
+- In the first one, a large group of readers and a single writer are spawned. Readers go to sleep on a single level, then the writer posts a single empty message on it. The time that this operation takes is logged, in seconds, using the *clock* API.
+- In the second one, a large group of writers is spawned. They all have to send an empty message on a single level. Given that no reader will be waiting on it, it'll be discarded, but in this test what we care about is the raw time necessary for a reader to access an instance on which there's contention. The time that this sequence of operations takes is logged as in the previous test.
+
+Some example runs logs are included in the included TXT files.
 
