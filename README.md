@@ -1,22 +1,22 @@
 # AOS-TAG
 
-Tag-based data exchange service between user threads, implemented as system calls added to the Linux kernel via a Loadable Kernel Module.
+Tag-based data exchange service between user threads, implemented as system calls added to the Linux kernel via kernel modules.
 Final project for the *Advanced Operating Systems* course at University of Rome Tor Vergata.
 **For x86 systems and kernels later than 4.17 only.**
 
 ## What's this?
 
-AOS-TAG is an interprocess communication system for user threads, implemented as a set of system calls added to the Linux kernel at runtime using modules.
-At the very base it is a **publish-subscribe** message system between threads of a same process or started by a same user, handling full packets of data without buffering. New instances of the service can be created or reopened, and each instance has 32 communication channels, namely *levels* numbered 0 to 31, on which threads can post or listen to incoming data.
+AOS-TAG is an interprocess communication system for user threads, implemented as a set of system calls added to the Linux kernel at runtime using the Loadable Kernel Modules.
+At the very base it is a **publish-subscribe** message system between threads of a same process or started by the same user, handling full packets of data without buffering. New instances of the service can be created or reopened, and each instance has 32 communication channels, named *levels* numbered 0 to 31, on which threads can post or listen to incoming data.
 The system calls provided allow a thread to:
 
-- Create a new instance of the service, or open an existing one, using a common *key* of type *int* and obtaining a *tag descriptor* used to operate on the instance from that moment on.
+- Create a new instance of the service, or open an existing one, using a common *key*s and obtaining a *tag descriptor* used to operate on the instance from that moment on.
 - Post data on a level of an instance. Note that being this a publish-subscribe system with no logging, messages are discarded after being read by subscribed threads (if any). Zero-length messages are anyhow allowed.
-- Wait for an incoming packet of data on an instance. Since this service performs only **packetized I/O**, the delivery is successfully performed only if the provided buffer is large enough to store the incoming data.
+- Wait for an incoming packet of data on an instance. Since this service performs only **packetized I/O**, the delivery is successfully performed only if the provided buffer is large enough to store the incoming data, and the copy operation succeeds.
 - Wake up all threads waiting on levels of an instance, interrupting their sleep like a signal would do.
 - Remove an instance from the system.
 
-On each of the aforementioned operations security checks are enforced to ensure that the calling thread is allowed to perform such call, and is providing coherent input arguments to the kernel code. Root user (EUID 0) has, by design, full control.
+On each of the aforementioned operations, security checks are enforced to ensure that the calling thread is allowed to perform such a call, and is providing coherent input arguments to the kernel code. Root user (EUID 0) has, by design, full control.
 
 For a thorough description of the underlying architecture and some notes about testing see [ideas.md](ideas.md).
 
@@ -24,9 +24,9 @@ For a thorough description of the underlying architecture and some notes about t
 
 This module depends on two other works, both included in this repository and developed by myself:
 
-- A kernel module to "hack" the system call table, i.e. to locate it in main memory and replace entries in it. It is called **_System Call Table Hacker - SCTH_**, was developed as one of the course homeworks and later improved after the public solution discussion. It is included in the *aos-tag/scth/* folder, gets compiled as a secondary module when building *aos-tag*, and must be inserted before it since this service depends on it to be correctly initialized. Proper module locking on it is also performed.
-    It has been left as a secondary module and not integrated in the final project to experiment with module locking, Kbuild compilation and linking dependencies, and exported symbols. It exposes four functions to the kernel software allowing to locate the system call table, alter and restore its entries, thus providing a simple interface to install new system calls, which is exactly what AOS-TAG has to do in its initialization routine. Some module parameters can also be specified during insertion to manually provide some hints about the table position in main memory, like the number of effective entries and the indexes of those mapped to *sys_ni_syscall*, which the module will replace on demand. It's also been a nice playground to experiment with many low-level architectural concepts and topics touched upon during the course.
-    **NOTE:** During installation of a system call, this module needs to alter the contents of write-protected memory areas. To do so, Write Protection is temporarily disabled by changing the corresponding flag in CR0. In order not to leave the system exposed during that time, not to mention the risk of being preempted and resumed on another CPU leaving the original one with WP disabled, **interrupts are disabled on the local CPU until WP is reenabled**, which really happens only after the write operation became globally visible thanks to memory fences. This is the only point in this project in which we tinker with interrupts.
+- A kernel module to "hack" the system call table, i.e. to locate it in main memory and replace entries in it. It is called **_System Call Table Hacker - SCTH_**, was developed as one of the course homeworks and improved after the public solution discussion. It is included in the *aos-tag/scth/* folder, gets compiled as a secondary module when building *aos-tag*, and must be inserted before it since this service depends on it to be correctly initialized. Proper module locking on it is also performed.
+    It has been left as a secondary module and not completely integrated in the final project to experiment with module locking, Kbuild compilation and linking dependencies, and exported symbols. It exposes four functions to the kernel software that allow us to locate the system call table, alter and restore its entries, thus providing a simple interface to install new system calls, which is exactly what AOS-TAG has to do in its initialization routine. Some module parameters can also be specified during insertion to manually provide some hints about the table position in main memory, like the number of effective entries and the indexes of those mapped to *sys_ni_syscall*, which the module will replace on demand. It's also been a nice playground to experiment with many low-level architectural concepts and topics covered during the course.
+    **NOTE:** During installation of a system call, this module needs to alter the contents of write-protected memory areas. To do so, Write Protection is temporarily disabled by toggling the corresponding bit in CR0. In order not to leave the system exposed during that time, not to mention the risk of being preempted and resumed on another CPU leaving the original one with WP disabled, **interrupts are disabled on the local CPU until WP is reenabled**, which really happens only after the write operation became globally visible thanks to memory fences. This is the only point in this project in which we tinker with interrupts.
 - An implementation of the *Splay Tree* dictionary data structure, a particular kind of binary search tree. Its code is a kernel-side rework of the contents of my other repository [splay-trees_c](https://github.com/robmasocco/splay-trees_c), added only as a library and not as a secondary module. Compared to the complete user-mode library, this one lacks all unnecessary search routines and relies on the *kmalloc* SLAB allocator to dynamically get and release memory for the nodes. Also, in order to allow concurrent accesses by readers, the *splaying* operation is not performed when searching for a key, only when inserting or deleting entries. This way, searches have linear worst-case access times, but since in the average case we can expect many more searches than insertions or deletions, nodes will be placed in the tree in a way that reflects how old the related instances are, thus making searches quicker the more recent the target instance is.
 
 ## Installation
@@ -40,7 +40,7 @@ After the module has been correctly inserted, the script will have generated an 
 
 Each stub is properly documented in the header. For completeness, such documentation is also reported here:
 
-- **_int tag_get(int key, int command, int permission)_:** Opens a new instance of the service, or reopens an existing one. Instances can be shared or not, depending on the value of *key*. An instance can be created or reopened, depending on the value of *cmd*. With *perm*, it is possible to specify whether permission checks should be peformed to limit access to threads executing on behalf of the same user that created the instance. Use the _TAG\_*_ flags for command and permission. Returns a valid tag descriptor, or -1 and *errno* will be set to indicate an error among:
+- **_int tag_get(int key, int command, int permission)_:** Opens a new instance of the service, or reopens an existing one. Instances can be shared or not, depending on the value of *key*. An instance can be created or reopened, depending on the value of *cmd*. With *perm*, it is possible to specify whether permission checks should be performed to limit access to threads executing on behalf of the same user that created the instance. Use the _TAG\_*_ flags for command and permission. Returns a valid tag descriptor, or -1 and *errno* will be set to indicate an error among:
 
     - EINVAL: Invalid input arguments.
     - EINTR: Interrupted by signal.
@@ -81,7 +81,7 @@ Each stub is properly documented in the header. For completeness, such documenta
 
 ## Checking system status
 
-The module includes some basic means of checking the system's status: some read-only module parameters and a device driver.
+The module includes some basic means to check the system's status: some read-only module parameters and a device driver.
 In detail, you have:
 
 - Some pseudofiles in */sys/module/aos_tag/parameters/*:
@@ -92,7 +92,7 @@ In detail, you have:
     - **tag_send_nr:** *tag_send* index in the system call table.
     - **tag_ctl_nr:** *tag_ctl* index in the system call table.
     - **tag_drv_major:** Status device driver major number.
-- A device file: */dev/aos_tag_status*, managed by a character device driver included in the module and initialized during insertion. Such driver allows every user to check the current state of the service. The file can be opened for reading, and each line describes a level of an active instance, with the following format:
+- A device file: */dev/aos_tag_status*, managed by a character device driver included in the module and initialized during insertion. This driver allows every user to check the current state of the service. The file can be opened for reading, and each line describes a level of an active instance, with the following format:
     **TAG    KEY    CREATOR EUID    LEVEL    WAITING THREADS**
     Only active, i.e. opened by at least one thread, instances are described in this file.
     Suggested (and tested) programs to access this file are *cat* and *less -f*.
