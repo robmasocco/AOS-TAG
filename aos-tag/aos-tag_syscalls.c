@@ -57,7 +57,7 @@ extern unsigned int max_msg_sz;
  * Instances can be shared or not, depending on the value of key. 
  * An instance can be created or reopened, depending on the value of cmd. 
  * With perm, it is possible to specify whether permission checks should be 
- * peformed to limit access to threads executing on behalf of the same user 
+ * performed to limit access to threads executing on behalf of the same user 
  * that created the instance. 
  * Shared instances will be added to the BST, thus everyone could potentially 
  * reopen them (but following operations might check permissions), 
