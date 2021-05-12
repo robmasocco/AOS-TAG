@@ -40,7 +40,7 @@ Then, from inside *aos-tag/*, to insert the module you have to run:
 
 ```bash
 sudo insmod scth/scth.ko  # Optional parameters here.
-sudo insmod aos_tag/aos_tag.ko  # Optional parameters here.
+sudo insmod aos_tag.ko  # Optional parameters here.
 ```
 
 To remove the modules later:
