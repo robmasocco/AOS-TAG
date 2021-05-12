@@ -20,11 +20,13 @@ So a thread that wishes to interact with an instance should first create or open
 
 ### BST Dictionary
 
-This dictionary holds *key-tag descriptor* pairs of the instances that were not created as *IPC_PRIVATE*, thus meant to be shared. It is indexed by keys and each node stores, together with the necessary pointers, the tag descriptor of the corresponding instance.
-Concurrent accesses to this structure are regulated with an rw_semaphore that allows multiple readers to perform queries and single writers to update it, adding or removing nodes, whilst excluding all readers and other writers.
-While an AVL tree would have certainly worked in this scenario, the choice has been made to optimize the dictionary even more considering an average usage pattern: it is reasonable to suppose that after a shared instance is created, and its node added to the tree, such instance will be referenced again multiple times by other threads that want to open it, possibly after a short time. The tree should then work like a *cache*: exploiting temporal locality with spatial locality by keeping "recent" nodes close to the root, making searches quicker.
-The BST that best fits these requirements without being too complicated is the **splay tree**, and it is how the BST dictionary is implemented in this project. Simply put, it differs from an AVL in the fact that each time a node is accessed, for any kind of operation, an heuristic named *splay* is performed on that node consisting in a series of rotations to bring it to the root. Balance of the tree is not explicitly maintained, so searches prove to be efficient only in an amortized analysis, but the space that each node requires and the time needed to perform rotations are less since no balancing information has to be stored, checked or updated.
-The only difference from the original version proposed by D. Sleator and R. Tarjan lies in the fact that we want to allow searches to be performed concurrently, which is not possible if at the end we need to splay the node (or the leaf node we end up at). Thus, **in this implementation we do not splay after searches**. This has the side effect that particularly pathological usage patterns may lead to a completely unbalanced tree, in which a search could have linear cost. This is indeed a compromise that we intend to make. Another optimization that has been chosen has to do with caching of nodes: given how small nodes are in term of size of the corresponding struct, a compiler optimization has been added to align them to the x86 cache line size.
+This dictionary holds *key-tag descriptor* pairs of the instances that were not created as *IPC_PRIVATE*, thus meant to be shared. It is indexed by keys and each node stores, together with the necessary pointers, the tag descriptor of the corresponding instance. It must support basic operations like *insert*, *search* and *delete*.
+Concurrent accesses to this structure are regulated by an rw_semaphore that allows multiple readers to perform queries and single writers to update it, adding or removing nodes, whilst excluding all readers and other writers.
+While an AVL tree would have certainly worked in this scenario, the choice has been made to optimize the dictionary even more considering an average usage pattern: it is reasonable to suppose that after a shared instance is created, and its node added to the tree, such instance will be referenced again multiple times by other threads that want to open it, possibly but not necessarily after a short time. The tree should then work like a *cache*: exploiting temporal locality with spatial locality by keeping "recent" nodes close to the root, making searches quicker.
+The BST that best fits these requirements without being too complicated is the **splay tree**, and it is how the BST dictionary is implemented in this project. Simply put, it differs from an AVL in the fact that each time a node is accessed, for any kind of operation, an heuristic named *splay* is performed on that node consisting in a series of rotations to bring it to the root. Balance of the tree is not explicitly maintained, so operations prove to be efficient only in an amortized analysis, but the space that each node requires and the time needed to perform rotations are less since no balancing information has to be stored, checked or updated. The amortized analysis shows that we can expect logarithmic access times for every operation: *O(log(n))*, where *n* is the number of nodes in the tree.
+The only major difference of this implementation from the original version proposed by D. Sleator and R. Tarjan lies in the fact that we want to allow searches to be performed concurrently, which is not possible if at the end we need to splay the node (or the leaf node we end up at). Thus, **in this implementation we do not splay after searches**. This has the side effect that particularly pathological usage patterns may lead to a completely unbalanced tree, in which a search could have linear cost. This is indeed a compromise that we intend to make.
+Also, the deletion operation has been implemented using a *join-based* scheme: instead of splaying the parent of the removed node to the root we splay the node to delete (if any), then we cut the tree in two subtrees, splay the node with the largest key in the left subtree and attach it as left son of the right subtree's root.
+Another optimization that has been chosen has to do with caching of nodes: given how small nodes are in term of size of the corresponding struct, a compiler optimization has been added to align them to the x86 cache line size.
 The code for this data structure, based on *kmalloc* for the dynamic allocation of nodes, can be found in the *aos-tag/splay-trees_int-keys/* subdirectory.
 
 ### Instances Array
@@ -138,7 +140,7 @@ This simple tester can be used to check that the system calls work, and produce 
 
 ## talker.c & listener.c
 
-These two programs allow to try out the message system, echoing a stream of a given message from a talker process to any number of listeners.
+These two programs allow to try out the message system, echoing  a given message from a talker process to any number of listeners.
 
 The talker requires a key to open a new instance, a level, a message string and a period in milliseconds that defines the message sending rate. A counter will be added to the message's contents, and of course zero is an allowed period.
 The listener only requires a key and a level. It will print the message together with its size (in bytes).
@@ -147,7 +149,7 @@ The two processes will then behave as the specification requires until interrupt
 
 ## functional_test.c
 
-This tester was meant to try out a vast majority of features primarily regarding an instance creation and removal, and message posting. Since almost all of this has been done with *talker* and *listener*, the only feature it tests is the possibility to create, and subsequently remove, all possible instances, checking the status device file in the meantime.
+This tester was meant to try out a vast majority of features primarily regarding an instance creation and removal, message posting and error codes. Since almost all of this has been done with *talker* and *listener*, the only feature it tests is the possibility to create, and subsequently remove, all possible instances, checking the status device file in the meantime.
 
 ## deadlock_test.c
 
@@ -158,8 +160,8 @@ All threads rejoin the main thread, and the process terminates successfully.
 ## load_test.c
 
 This tester was meant to investigate the performances of this system.
-We have many factors at play, especially considering that this code runs in the kernel and must be reached via a GATE.
+We have many factors at play, especially considering that this code runs in the kernel and must be called via a GATE.
 Essentially, operations can be divided in two groups: those interacting with the BST and those handling messages.
-About the first group, all depends on the actual performance of the data structure employed, which is thoroughly described [here](https://www.cs.cmu.edu/~sleator/papers/self-adjusting.pdf).
-About the second group, much has already been told, however the only metric that has been valued in this project is *perceived user space latency* of a group of read or write operations on a single level of an instance. TODO
+About the first group, everything depends on the actual performance of the data structure employed, which is thoroughly described [here](https://www.cs.cmu.edu/~sleator/papers/self-adjusting.pdf). As already noted, the only two differences from the original implementation are the absence of the *splay* step in the search operation, and the join-based deletion scheme.
+About the second group, much has already been told, however the only metric that has been valued in this project is **perceived user space latency** of a group of read or write operations on a single level of an instance. TODO
 
